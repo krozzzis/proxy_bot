@@ -11,9 +11,12 @@ dependencies = [
     "aiogram>=3.30.0",
     "aiogram-dialog>=2.6.0",
     "aiogram-i18n>=1.5",
+    "emoji>=2.15.0",
     "fluent-compiler>=1.1",
     "python-dotenv>=1.2.2",
+    "redis>=8.0.1",
     "tomli-w>=1.2.0",
+    "watchfiles>=1.2.0",
 ]
 
 [project.scripts]

@@ -18,6 +18,9 @@ class Config:
     locales_dir: Path
     default_locale: str
     log_level: str
+    fsm_backend: str
+    fsm_sqlite_path: Path
+    redis_url: str | None
 
 
 def _require_env(name: str) -> str:
@@ -37,4 +40,7 @@ def load_config() -> Config:
         locales_dir=Path(os.environ.get("LOCALES_DIR", BASE_DIR / "locales")),
         default_locale=os.environ.get("DEFAULT_LOCALE", "ru"),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
+        fsm_backend=os.environ.get("FSM_BACKEND", "sqlite").lower(),
+        fsm_sqlite_path=Path(os.environ.get("FSM_SQLITE_PATH", BASE_DIR / "data" / "fsm.sqlite3")),
+        redis_url=os.environ.get("REDIS_URL"),
     )

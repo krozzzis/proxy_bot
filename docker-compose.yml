@@ -13,6 +13,10 @@ services:
       ROOT_ADMIN_ID: ${ROOT_ADMIN_ID:?Set ROOT_ADMIN_ID in .env}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # FSM/dialog state storage: "sqlite" (default, no extra service needed)
+      # or "redis" (start with --profile redis, see REDIS_URL below).
+      FSM_BACKEND: ${FSM_BACKEND:-sqlite}
+      REDIS_URL: ${REDIS_URL:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -31,3 +35,17 @@ services:
       WATCHTOWER_CLEANUP: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+  # Prod FSM backend. Not started by default - opt in with:
+  #   FSM_BACKEND=redis REDIS_URL=redis://redis:6379/0 docker compose --profile redis up -d
+  redis:
+    image: redis:7-alpine
+    container_name: proxy_bot_redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
