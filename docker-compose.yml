@@ -1,0 +1,33 @@
+name: proxy_bot
+
+services:
+  bot:
+    build: .
+    image: ghcr.io/krozzzis/proxy_bot:latest
+    container_name: proxy_bot
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN in .env}
+      ROOT_ADMIN_ID: ${ROOT_ADMIN_ID:?Set ROOT_ADMIN_ID in .env}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+  # Auto-deploy: polls ghcr.io for a newer "bot" image and recreates the
+  # container when one appears. Only touches containers with the
+  # watchtower.enable label above, so it's safe next to unrelated containers
+  # on a shared host. Not needed for local dev - only relevant on the server.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: proxy_bot_watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

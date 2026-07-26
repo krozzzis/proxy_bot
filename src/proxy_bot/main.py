@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.filters import ExceptionTypeFilter
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram_dialog import setup_dialogs
+from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent, UnknownState
+
+from proxy_bot.commands import setup_bot_commands
+from proxy_bot.config import load_config
+from proxy_bot.dialogs import get_dialogs
+from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
+from proxy_bot.logging_config import setup_logging
+from proxy_bot.storage import Storage
+from proxy_bot.utils.i18n import build_i18n_middleware
+
+logger = logging.getLogger(__name__)
+
+
+async def run() -> None:
+    config = load_config()
+    setup_logging(config.logs_dir, level=config.log_level)
+
+    storage = Storage(config.data_dir, root_admin_id=config.root_admin_id)
+
+    # HTML parse mode is on for every send (plain fluent strings render fine
+    # as HTML). Any dynamic value interpolated into a message - names, codes,
+    # links, admin-authored text - must go through utils.html.esc() first.
+    bot = Bot(token=config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    dp = Dispatcher(storage=MemoryStorage())
+    dp["storage"] = storage
+
+    i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale)
+    i18n_middleware.setup(dispatcher=dp)
+
+    for router in get_command_routers():
+        dp.include_router(router)
+    for dialog in get_dialogs():
+        dp.include_router(dialog)
+    for router in get_fallback_routers():
+        dp.include_router(router)
+
+    setup_dialogs(dp)
+    dp.errors.register(on_unknown_dialog_event, ExceptionTypeFilter(UnknownIntent, OutdatedIntent, UnknownState))
+
+    await setup_bot_commands(bot, storage)
+
+    logger.info("Starting bot polling")
+    await bot.delete_webhook(drop_pending_updates=True)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
+
+
+def main() -> None:
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped")
+
+
+if __name__ == "__main__":
+    main()

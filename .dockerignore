@@ -1,0 +1,10 @@
+.venv
+.git
+.direnv
+.env
+data
+logs
+__pycache__
+*.pyc
+flake.nix
+flake.lock
