@@ -20,6 +20,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim-bookworm AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system bot && useradd --system --gid bot --create-home bot
 
 WORKDIR /app
@@ -27,6 +30,7 @@ COPY --from=builder --chown=bot:bot /app/.venv /app/.venv
 COPY --from=builder --chown=bot:bot /app/locales /app/locales
 COPY --from=builder --chown=bot:bot /app/src /app/src
 COPY --from=builder --chown=bot:bot /app/pyproject.toml /app/pyproject.toml
+COPY --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
 ENV PATH="/app/.venv/bin:$PATH" \
     DATA_DIR=/app/data \
@@ -36,7 +40,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 RUN mkdir -p /app/data /app/logs && chown -R bot:bot /app/data /app/logs
 
-USER bot
 VOLUME ["/app/data", "/app/logs"]
 
-ENTRYPOINT ["proxy-bot"]
+# Stays root here so the entrypoint can fix bind-mounted volume ownership,
+# then drops to "bot" via gosu before actually running the app.
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["proxy-bot"]
