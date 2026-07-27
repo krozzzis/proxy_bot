@@ -48,11 +48,7 @@ async def cmd_help(message: Message, dialog_manager: DialogManager) -> None:
 @router.message(Command("admin"), IsAdmin())
 async def cmd_admin(message: Message, dialog_manager: DialogManager) -> None:
     logger.info("%s opened the admin panel", actor(message.from_user))
-    # Put the user menu under the admin panel on the stack (same as the
-    # in-menu "admin panel" button) so closing it lands back on the main
-    # menu instead of leaving nothing to return to.
-    await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK)
-    await dialog_manager.start(AdminMenu.main)
+    await dialog_manager.start(AdminMenu.main, mode=StartMode.RESET_STACK)
 
 
 @router.message(Command("admin"))

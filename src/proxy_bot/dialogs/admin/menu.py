@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Column
 from aiogram_dialog.widgets.text import Format
 
-from ..states import AdminAdmins, AdminBroadcast, AdminCodes, AdminCreateCode, AdminMenu, AdminUsers
+from ..states import AdminAdmins, AdminBroadcast, AdminCodes, AdminCreateCode, AdminMenu, AdminUsers, UserMenu
 
 
 async def admin_menu_getter(i18n, **kwargs) -> dict:
@@ -41,7 +41,15 @@ async def open_broadcast(_callback: CallbackQuery, _button: Button, manager: Dia
 
 
 async def close_menu(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    await manager.done()
+    # Opened from the merged user menu, the admin panel sits on top of a
+    # UserMenu.main dialog on the stack, so done() pops back to it. Opened
+    # directly via /admin, the admin panel is the only thing on the stack
+    # (a single-message entry point), so there's nothing beneath it to pop
+    # back to - start the user menu explicitly in that case instead.
+    if len(manager.current_stack().intents) > 1:
+        await manager.done()
+    else:
+        await manager.start(UserMenu.main, mode=StartMode.RESET_STACK)
 
 
 def admin_menu_window() -> Window:

@@ -19,6 +19,7 @@ from proxy_bot.fsm import build_fsm_storage
 from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
 from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
+from proxy_bot.middlewares import InteractionLoggingMiddleware
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
 
@@ -59,6 +60,10 @@ async def run() -> None:
 
     i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale)
     i18n_middleware.setup(dispatcher=dp)
+
+    interaction_logger = InteractionLoggingMiddleware()
+    dp.message.outer_middleware(interaction_logger)
+    dp.callback_query.outer_middleware(interaction_logger)
 
     for router in get_command_routers():
         dp.include_router(router)
