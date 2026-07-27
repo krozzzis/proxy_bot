@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode
 
@@ -14,6 +14,15 @@ from proxy_bot.utils.audit import actor
 logger = logging.getLogger(__name__)
 
 router = Router(name="user")
+
+
+@router.message(CommandStart(deep_link=True))
+async def cmd_start_with_code(message: Message, dialog_manager: DialogManager, command: CommandObject) -> None:
+    # Deep link: t.me/<bot>?start=<code> auto-activates <code>, same as typing
+    # it manually into "Ввести код" (see dialogs/menu.py: on_dialog_start).
+    await dialog_manager.start(
+        UserMenu.main, mode=StartMode.RESET_STACK, data={"greet": True, "auto_code": command.args}
+    )
 
 
 @router.message(CommandStart())

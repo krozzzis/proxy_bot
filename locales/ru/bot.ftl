@@ -16,11 +16,12 @@ menu-btn-enter-code = :heavy_plus_sign: Ввести код
 menu-btn-links =  :key: Мои ссылки
 menu-btn-help = :question: Помощь
 menu-btn-back = :arrow_backward: Назад
+menu-btn-admin = :gear: Админ-панель
 
 code-invalid = :x: Код не найден. Проверьте правильность ввода и попробуйте ещё раз.
 code-banned = :no_entry_sign: Ваш аккаунт заблокирован администратором. Обратитесь в поддержку.
-code-already-added = Этот код уже добавлен к вашему аккаунту. Ссылки можно получить командой /link.
-code-accepted = :white_check_mark: <b>Код принят!</b> Ваши ссылки:
+code-already-added = :white_check_mark: Этот код уже добавлен к вашему аккаунту.
+code-accepted = :white_check_mark: <b>Код принят!</b>
 code-prompt-again = Введите новый код доступа.
 
 link-header = :key: <b>Ваши ссылки</b>

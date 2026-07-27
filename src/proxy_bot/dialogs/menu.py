@@ -1,30 +1,78 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
-from aiogram.types import Message
+from aiogram.types import Message, User
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Column, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Column, SwitchTo
 from aiogram_dialog.widgets.text import Format
 
-from proxy_bot.storage import Storage
+from proxy_bot.storage import Code, Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 
 from .common import not_a_command
-from .states import UserMenu
+from .states import AdminMenu, UserMenu
 
 logger = logging.getLogger(__name__)
+
+ActivationStatus = Literal["banned", "invalid", "already", "added"]
+
+
+async def _activate_code(storage: Storage, user: User, code_text: str) -> tuple[ActivationStatus, Code | None]:
+    """Try to activate `code_text` for `user`. Shared by manual entry
+    (on_code_entered) and /start deep-link auto-activation (on_dialog_start).
+    """
+    db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
+    if db_user.banned:
+        logger.info("Banned %s tried to enter code %r", actor(user), code_text.strip())
+        return "banned", None
+
+    code = code_text.strip()
+    code_record = await storage.codes.get(code)
+    if code_record is None or not code_record.active:
+        logger.info("%s entered unknown code %r", actor(user), code)
+        return "invalid", None
+
+    added = await storage.users.add_code(user.id, code)
+    if not added:
+        logger.info("%s re-entered already-activated code %r", actor(user), code)
+        return "already", code_record
+
+    logger.info("%s activated code %r", actor(user), code)
+    return "added", code_record
 
 
 async def on_dialog_start(start_data, dialog_manager: DialogManager) -> None:
     storage: Storage = dialog_manager.middleware_data["storage"]
     user = dialog_manager.middleware_data["event_from_user"]
     await storage.users.get_or_create(user.id, user.username, user.full_name)
-    if isinstance(start_data, dict) and start_data.get("greet"):
+
+    if not isinstance(start_data, dict):
+        return
+
+    if start_data.get("greet"):
         dialog_manager.dialog_data["greet"] = True
+
+    auto_code = start_data.get("auto_code")
+    if not auto_code:
+        return
+
+    i18n = dialog_manager.middleware_data["i18n"]
+    bot = dialog_manager.middleware_data["bot"]
+    chat_id = dialog_manager.middleware_data["event_chat"].id
+
+    status, _code_record = await _activate_code(storage, user, auto_code)
+    if status in ("banned", "invalid"):
+        dialog_manager.dialog_data["error"] = status
+        await dialog_manager.switch_to(UserMenu.enter_code)
+    else:
+        text = i18n.get("code-already-added") if status == "already" else i18n.get("code-accepted")
+        await bot.send_message(chat_id, text)
+        await dialog_manager.switch_to(UserMenu.links)
 
 
 async def on_open_enter_code(_callback, _widget, manager: DialogManager) -> None:
@@ -35,7 +83,13 @@ async def on_open_enter_code(_callback, _widget, manager: DialogManager) -> None
     manager.dialog_data.pop("error", None)
 
 
-async def main_menu_getter(dialog_manager: DialogManager, i18n, event_from_user, **kwargs) -> dict:
+async def open_admin_panel(_callback, _button: Button, manager: DialogManager) -> None:
+    await manager.start(AdminMenu.main)
+
+
+async def main_menu_getter(
+    dialog_manager: DialogManager, i18n, event_from_user, storage: Storage, **kwargs
+) -> dict:
     # Shown once, right after a fresh /start - not on every return to this
     # window, so the greeting doesn't repeat every time the user navigates
     # back to the main menu.
@@ -48,6 +102,8 @@ async def main_menu_getter(dialog_manager: DialogManager, i18n, event_from_user,
         "btn_enter_code": i18n.get("menu-btn-enter-code"),
         "btn_links": i18n.get("menu-btn-links"),
         "btn_help": i18n.get("menu-btn-help"),
+        "btn_admin": i18n.get("menu-btn-admin"),
+        "is_admin": await storage.admins.is_admin(event_from_user.id),
     }
 
 
@@ -72,28 +128,17 @@ async def on_code_entered(
     i18n = dialog_manager.middleware_data["i18n"]
     user = message.from_user
 
-    db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
-    if db_user.banned:
-        dialog_manager.dialog_data["error"] = "banned"
-        logger.info("Banned %s tried to enter code %r", actor(user), code_text.strip())
-        return
-
-    code = code_text.strip()
-    code_record = await storage.codes.get(code)
-    if code_record is None or not code_record.active:
-        dialog_manager.dialog_data["error"] = "invalid"
-        logger.info("%s entered unknown code %r", actor(user), code)
+    status, _code_record = await _activate_code(storage, user, code_text)
+    if status in ("banned", "invalid"):
+        dialog_manager.dialog_data["error"] = status
         return
 
     dialog_manager.dialog_data.pop("error", None)
-    added = await storage.users.add_code(user.id, code)
-    if not added:
+    if status == "already":
         await message.answer(i18n.get("code-already-added"))
-        logger.info("%s re-entered already-activated code %r", actor(user), code)
     else:
-        await message.answer(f"{i18n.get('code-accepted')}\n\n{format_links(code_record.links)}")
-        logger.info("%s activated code %r", actor(user), code)
-    await dialog_manager.switch_to(UserMenu.main)
+        await message.answer(i18n.get("code-accepted"))
+    await dialog_manager.switch_to(UserMenu.links)
 
 
 async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
@@ -146,6 +191,7 @@ def user_menu_dialog() -> Dialog:
                 ),
                 SwitchTo(Format("{btn_links}"), id="open_links", state=UserMenu.links),
                 SwitchTo(Format("{btn_help}"), id="open_help", state=UserMenu.help),
+                Button(Format("{btn_admin}"), id="open_admin", on_click=open_admin_panel, when="is_admin"),
             ),
             state=UserMenu.main,
             getter=main_menu_getter,

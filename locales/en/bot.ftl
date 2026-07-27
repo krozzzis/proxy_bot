@@ -16,11 +16,12 @@ menu-btn-enter-code = :heavy_plus_sign: Enter code
 menu-btn-links = :key: My links
 menu-btn-help = :question: Help
 menu-btn-back = :arrow_backward: Back
+menu-btn-admin = :gear: Admin panel
 
 code-invalid = :x: Code not found. Check it and try again.
 code-banned = :no_entry_sign: Your account has been banned by an administrator. Please contact support.
-code-already-added = This code is already linked to your account. Get the links with /link.
-code-accepted = :white_check_mark: <b>Code accepted!</b> Here are your links:
+code-already-added = :white_check_mark: This code is already linked to your account.
+code-accepted = :white_check_mark: <b>Code accepted!</b>
 code-prompt-again = Enter another access code.
 
 link-header = :key: <b>Your links</b>
