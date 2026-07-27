@@ -145,6 +145,31 @@ docker compose --profile redis up -d --build
 (`heartbeat.py`) периодически обновляет mtime файла, а healthcheck
 проверяет его свежесть — так Docker обнаруживает завис­ший event loop.
 
+**Известная проблема Watchtower:** образ `containrrr/watchtower` тянет старую
+версию Docker SDK, которая по умолчанию говорит с демоном по API-версии 1.25.
+Некоторые хосты это отклоняют:
+
+```
+Error response from daemon: client version 1.25 is too old.
+Minimum supported API version is 1.40
+```
+
+Контейнер при этом циклически перезапускается. Фикс — задать
+`DOCKER_API_VERSION` явно (уже сделано в `docker-compose.yml`, по умолчанию
+`1.41`); если у вас другая версия демона, узнайте её и переопределите в `.env`:
+
+```sh
+docker version --format '{{.Server.APIVersion}}'
+# в .env:
+DOCKER_API_VERSION=<результат выше>
+```
+
+и пересоздайте только этот контейнер:
+
+```sh
+docker compose up -d watchtower
+```
+
 ### GitOps: автодеплой из GitHub
 
 После пуша в `main` сервер сам подтягивает новую версию — без ручного захода

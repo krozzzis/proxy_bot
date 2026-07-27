@@ -51,6 +51,11 @@ services:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_POLL_INTERVAL: "300"
       WATCHTOWER_CLEANUP: "true"
+      # The image's bundled Docker SDK defaults to a very old API version
+      # (1.25) that some hosts' daemons refuse ("client version 1.25 is too
+      # old"). Pin it explicitly; override in .env if your host needs a
+      # different floor (check with: docker version --format '{{.Server.APIVersion}}').
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.41}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     deploy:
