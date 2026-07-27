@@ -63,9 +63,9 @@ admin-btn-codes = :package: Все коды
 admin-btn-users = :bust_in_silhouette: Пользователи
 admin-btn-admins = :shield: Администраторы
 admin-btn-broadcast = :loudspeaker: Рассылка
-admin-btn-close = :heavy_multiplication_x: Закрыть
+admin-btn-close = :arrow_backward: Назад
 admin-btn-back = :arrow_backward: Назад
-admin-btn-cancel = Отмена
+admin-btn-cancel = :x: Отмена
 admin-btn-confirm = :white_check_mark: Подтвердить
 admin-btn-done = :white_check_mark: Готово
 admin-btn-undo = :leftwards_arrow_with_hook: Отменить последнюю
@@ -85,7 +85,7 @@ admin-code-detail-title =
     :package: Код: <b>{ $code }</b>
     Описание: { $description }
 admin-code-no-links = Ссылок пока нет.
-admin-code-remove-link-btn = :heavy_multiplication_x: Удалить ссылку #{ $n }
+admin-code-remove-link-btn = :x: Удалить ссылку #{ $n }
 admin-code-link-removed = Ссылка удалена.
 admin-btn-add-link = :heavy_plus_sign: Добавить ссылку
 admin-btn-edit-description = :pencil2: Изменить описание
@@ -104,7 +104,7 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Забанен: { $banned }
 admin-user-codes-none = У пользователя нет активированных кодов.
-admin-user-revoke-btn = :heavy_multiplication_x: Отобрать «{ $code }»
+admin-user-revoke-btn = :x: Отобрать «{ $code }»
 admin-user-revoke-done = Код «{ $code }» отобран у пользователя { $id }.
 admin-user-ban-btn = :no_entry_sign: Забанить пользователя
 admin-user-unban-btn = :white_check_mark: Разбанить пользователя

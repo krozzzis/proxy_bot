@@ -63,9 +63,9 @@ admin-btn-codes = :package: All codes
 admin-btn-users = :bust_in_silhouette: Users
 admin-btn-admins = :shield: Admins
 admin-btn-broadcast = :loudspeaker: Broadcast
-admin-btn-close = :heavy_multiplication_x: Close
+admin-btn-close = :arrow_backward: Back
 admin-btn-back = :arrow_backward: Back
-admin-btn-cancel = Cancel
+admin-btn-cancel = :x: Cancel
 admin-btn-confirm = :white_check_mark: Confirm
 admin-btn-done = :white_check_mark: Done
 admin-btn-undo = :leftwards_arrow_with_hook: Undo last
@@ -85,7 +85,7 @@ admin-code-detail-title =
     :package: Code: <b>{ $code }</b>
     Description: { $description }
 admin-code-no-links = No links yet.
-admin-code-remove-link-btn = :heavy_multiplication_x: Remove link #{ $n }
+admin-code-remove-link-btn = :x: Remove link #{ $n }
 admin-code-link-removed = Link removed.
 admin-btn-add-link = :heavy_plus_sign: Add link
 admin-btn-edit-description = :pencil2: Edit description
@@ -104,7 +104,7 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Banned: { $banned }
 admin-user-codes-none = This user has no activated codes.
-admin-user-revoke-btn = :heavy_multiplication_x: Revoke "{ $code }"
+admin-user-revoke-btn = :x: Revoke "{ $code }"
 admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = :no_entry_sign: Ban user
 admin-user-unban-btn = :white_check_mark: Unban user
