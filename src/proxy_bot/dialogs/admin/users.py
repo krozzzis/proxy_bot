@@ -8,6 +8,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..states import AdminUsers
@@ -92,7 +93,9 @@ async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManage
 
     removed = await storage.users.remove_code(user_id, item_id)
     if removed:
-        logger.info("Admin %s revoked code %r from user %s", admin.id, item_id, user_id)
+        target_user = await storage.users.get(user_id)
+        target = actor_id(user_id, target_user.username if target_user else None)
+        logger.info("%s revoked code %r from %s", actor(admin), item_id, target)
         await callback.answer(i18n.get("admin-user-revoke-done", code=item_id, id=str(user_id)), show_alert=True)
 
 
@@ -110,7 +113,9 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
         return
     new_state = not user.banned
     await storage.users.set_banned(user_id, new_state)
-    logger.info("Admin %s set banned=%s for user %s", admin.id, new_state, user_id)
+    target = actor_id(user_id, user.username)
+    action = "banned" if new_state else "unbanned"
+    logger.info("%s %s %s", actor(admin), action, target)
     await callback.answer()
 
 

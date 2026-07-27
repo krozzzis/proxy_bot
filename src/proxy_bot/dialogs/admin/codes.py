@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, Swit
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
 from ..common import not_a_command
@@ -115,7 +116,7 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
         return
     link = code.links[index]
     await storage.codes.remove_link(code_id, link)
-    logger.info("Admin %s removed a link from code %r", admin.id, code_id)
+    logger.info("%s removed a link from code %r", actor(admin), code_id)
     await callback.answer(i18n.get("admin-code-link-removed"))
 
 
@@ -136,7 +137,7 @@ async def on_link_entered(message: Message, widget: ManagedTextInput, manager: D
     link = link_text.strip()
     if link:
         await storage.codes.add_link(code_id, link)
-        logger.info("Admin %s added a link to code %r", admin.id, code_id)
+        logger.info("%s added a link to code %r", actor(admin), code_id)
         await message.answer(i18n.get("admin-code-link-added"))
     await manager.switch_to(AdminCodes.detail)
 
@@ -154,12 +155,14 @@ async def on_description_entered(
 ) -> None:
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
+    admin = manager.middleware_data["event_from_user"]
     code_id = manager.dialog_data.get("selected_code")
 
     description = description_text.strip()
     if description == "-":
         description = ""
     await storage.codes.set_description(code_id, description)
+    logger.info("%s changed description of code %r", actor(admin), code_id)
     await message.answer(i18n.get("admin-code-description-updated"))
     await manager.switch_to(AdminCodes.detail)
 
@@ -171,7 +174,7 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
     code_id = manager.dialog_data.get("selected_code")
 
     await storage.codes.delete(code_id)
-    logger.info("Admin %s deleted code %r", admin.id, code_id)
+    logger.info("%s deleted code %r", actor(admin), code_id)
     await callback.answer(i18n.get("admin-code-deleted", code=code_id), show_alert=True)
     await manager.switch_to(AdminCodes.list)
 

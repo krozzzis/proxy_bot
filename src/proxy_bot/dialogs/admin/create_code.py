@@ -10,6 +10,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
 from ..common import not_a_command
@@ -99,7 +100,7 @@ async def on_description_input(
     code = manager.dialog_data["new_code"]
     links = manager.dialog_data.get("new_links", [])
     await storage.codes.create(code=code, links=links, description=description, created_by=user.id)
-    logger.info("Admin %s created code %r with %d link(s)", user.id, code, len(links))
+    logger.info("%s created code %r with %d link(s)", actor(user), code, len(links))
     await message.answer(i18n.get("admin-create-code-done", code=esc(code)))
     await manager.done()
 

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from proxy_bot.utils.audit import actor_id
+
 from .models import User
 from .toml_file import TomlFile
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -30,11 +35,15 @@ class UserRepo:
         return [u for u in await self.all() if code in u.codes]
 
     async def get_or_create(self, user_id: int, username: str | None, full_name: str) -> User:
+        is_new = False
+
         def mutate(data: dict) -> User:
+            nonlocal is_new
             users = data.setdefault("users", {})
             key = str(user_id)
             # TOML has no null; store "" for an absent Telegram username.
             if key not in users:
+                is_new = True
                 users[key] = {
                     "username": username or "",
                     "full_name": full_name,
@@ -47,7 +56,10 @@ class UserRepo:
                 users[key]["full_name"] = full_name
             return User(user_id=user_id, **users[key])
 
-        return await self._file.update(mutate)
+        user = await self._file.update(mutate)
+        if is_new:
+            logger.info("New user registered: %s", actor_id(user_id, username))
+        return user
 
     async def add_code(self, user_id: int, code: str) -> bool:
         """Attach a code to a user. Returns False if already attached."""

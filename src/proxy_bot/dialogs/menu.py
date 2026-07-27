@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.kbd import Column, SwitchTo
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 
@@ -74,22 +75,24 @@ async def on_code_entered(
     db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
     if db_user.banned:
         dialog_manager.dialog_data["error"] = "banned"
+        logger.info("Banned %s tried to enter code %r", actor(user), code_text.strip())
         return
 
     code = code_text.strip()
     code_record = await storage.codes.get(code)
     if code_record is None or not code_record.active:
         dialog_manager.dialog_data["error"] = "invalid"
-        logger.info("User %s entered unknown code %r", user.id, code)
+        logger.info("%s entered unknown code %r", actor(user), code)
         return
 
     dialog_manager.dialog_data.pop("error", None)
     added = await storage.users.add_code(user.id, code)
     if not added:
         await message.answer(i18n.get("code-already-added"))
+        logger.info("%s re-entered already-activated code %r", actor(user), code)
     else:
         await message.answer(f"{i18n.get('code-accepted')}\n\n{format_links(code_record.links)}")
-        logger.info("User %s activated code %r", user.id, code)
+        logger.info("%s activated code %r", actor(user), code)
     await dialog_manager.switch_to(UserMenu.main)
 
 

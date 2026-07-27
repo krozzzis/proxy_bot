@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Select, SwitchTo
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage, User
+from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import not_a_command
@@ -103,11 +104,15 @@ async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: Dia
             await bot.send_message(user.user_id, body)
             sent += 1
         except Exception:
-            logger.warning("Broadcast failed for user %s", user.user_id, exc_info=True)
+            logger.warning("Broadcast message failed to reach %s", actor_id(user.user_id, user.username), exc_info=True)
             failed += 1
         await asyncio.sleep(THROTTLE_SECONDS)
 
-    logger.info("Admin %s broadcast to %s users (%s failed)", admin.id, sent, failed)
+    target = "all users" if manager.dialog_data.get("target") != "code" else f"code={manager.dialog_data.get('target_code')}"
+    preview = text if len(text) <= 80 else f"{text[:77]}..."
+    logger.info(
+        "%s broadcast to %s (%d sent, %d failed): %r", actor(admin), target, sent, failed, preview
+    )
     await callback.message.answer(i18n.get("admin-broadcast-done", sent=sent, failed=failed))
     await manager.done()
 

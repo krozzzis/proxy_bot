@@ -10,6 +10,7 @@ from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.commands import set_admin_commands
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import not_a_command
@@ -49,11 +50,15 @@ async def on_id_entered(message: Message, widget: ManagedTextInput, manager: Dia
     admin = manager.middleware_data["event_from_user"]
 
     manager.dialog_data["id_error"] = False
+    target_user = await storage.users.get(user_id)
+    target = actor_id(user_id, target_user.username if target_user else None)
+
     added = await storage.admins.add(user_id, username=None, added_by=admin.id)
     if not added:
+        logger.info("%s tried to grant admin rights to %s, who already is one", actor(admin), target)
         await message.answer(i18n.get("admin-add-admin-already"))
     else:
-        logger.info("Admin %s granted admin rights to %s", admin.id, user_id)
+        logger.info("%s granted admin rights to %s", actor(admin), target)
         await set_admin_commands(manager.middleware_data["bot"], user_id)
         await message.answer(i18n.get("admin-add-admin-done", id=str(user_id)))
     await manager.switch_to(AdminAdmins.list)
