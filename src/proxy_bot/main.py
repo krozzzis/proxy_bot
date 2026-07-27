@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import Awaitable, Callable
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -16,11 +17,30 @@ from proxy_bot.config import load_config
 from proxy_bot.dialogs import get_dialogs
 from proxy_bot.fsm import build_fsm_storage
 from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
+from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
 
 logger = logging.getLogger(__name__)
+
+
+def _register_background_task(dp: Dispatcher, factory: Callable[[], Awaitable[None]]) -> None:
+    """Run factory() as a task for the lifetime of the bot, cancelled on shutdown."""
+    task: asyncio.Task[None] | None = None
+
+    async def start(**_kwargs: object) -> None:
+        nonlocal task
+        task = asyncio.create_task(factory())
+
+    async def stop(**_kwargs: object) -> None:
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    dp.startup.register(start)
+    dp.shutdown.register(stop)
 
 
 async def run() -> None:
@@ -49,20 +69,11 @@ async def run() -> None:
     setup_dialogs(dp)
     dp.errors.register(on_unknown_dialog_event, ExceptionTypeFilter(UnknownIntent, OutdatedIntent, UnknownState))
 
-    locale_watch_task: asyncio.Task[None] | None = None
-
-    async def start_locale_watch(**_kwargs: object) -> None:
-        nonlocal locale_watch_task
-        locale_watch_task = asyncio.create_task(watch_locales(i18n_middleware.core, config.locales_dir))
-
-    async def stop_locale_watch(**_kwargs: object) -> None:
-        if locale_watch_task is not None:
-            locale_watch_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await locale_watch_task
-
-    dp.startup.register(start_locale_watch)
-    dp.shutdown.register(stop_locale_watch)
+    _register_background_task(dp, lambda: watch_locales(i18n_middleware.core, config.locales_dir))
+    # Picked up by the Docker HEALTHCHECK (see docker-compose.yml) - the bot
+    # has no HTTP server to probe, so liveness is "the event loop is still
+    # ticking" via a periodically touched file.
+    _register_background_task(dp, lambda: run_heartbeat(config.data_dir / ".heartbeat"))
 
     await setup_bot_commands(bot, storage)
 

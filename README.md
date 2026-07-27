@@ -129,6 +129,22 @@ REDIS_URL=redis://redis:6379/0
 docker compose --profile redis up -d --build
 ```
 
+#### Лимиты ресурсов и healthcheck
+
+У каждого сервиса в `docker-compose.yml` заданы `deploy.resources` (лимиты и
+резервы CPU/памяти — применяются и без Swarm, Compose v2 транслирует их
+напрямую в cgroup-лимиты контейнера) и `healthcheck`:
+
+| Сервис | CPU limit | Memory limit | Проверка здоровья |
+|---|---|---|---|
+| `bot` | 1.0 | 512M | файл `data/.heartbeat`, обновляемый фоновой задачей каждые 30с — не старше 90с |
+| `watchtower` | 0.25 | 128M | встроенный `watchtower --health-check` |
+| `redis` | 0.5 | 256M | `redis-cli ping`; `--maxmemory 200mb` держит heap ниже лимита контейнера, чтобы Redis сам вытеснял ключи, а не получал OOM-kill |
+
+У бота нет HTTP-сервера для проверки — вместо этого фоновая задача
+(`heartbeat.py`) периодически обновляет mtime файла, а healthcheck
+проверяет его свежесть — так Docker обнаруживает завис­ший event loop.
+
 ### GitOps: автодеплой из GitHub
 
 После пуша в `main` сервер сам подтягивает новую версию — без ручного захода
@@ -206,7 +222,7 @@ src/proxy_bot/
   handlers/    команды /start /help /link /code, fallback на неизвестные сообщения
   filters/     IsAdmin
   utils/       i18n (Fluent, эмодзи-шорткоды, watch_locales), html.esc(), форматирование ссылок
-  config.py, logging_config.py, commands.py, main.py
+  config.py, logging_config.py, commands.py, heartbeat.py, main.py
 locales/ru, locales/en     .ftl-файлы
 data/, logs/                состояние во время выполнения (не в git, создать вручную)
 ```

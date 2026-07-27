@@ -20,6 +20,24 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    # No HTTP server to probe (long-polling bot) - liveness is "the event
+    # loop is still ticking", via a file touched every 30s (heartbeat.py).
+    # start_period covers startup (deps sync, locale compile) before the
+    # first heartbeat write.
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import pathlib,sys,time; p=pathlib.Path('/app/data/.heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime<90 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   # Auto-deploy: polls ghcr.io for a newer "bot" image and recreates the
   # container when one appears. Only touches containers with the
@@ -35,6 +53,22 @@ services:
       WATCHTOWER_CLEANUP: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    # --health-check is watchtower's own self-check mode, meant to be exec'd
+    # into the already-running container (not passed as the main command).
+    healthcheck:
+      test: ["CMD", "/watchtower", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # Prod FSM backend. Not started by default - opt in with:
   #   FSM_BACKEND=redis REDIS_URL=redis://redis:6379/0 docker compose --profile redis up -d
@@ -43,9 +77,25 @@ services:
     container_name: proxy_bot_redis
     restart: unless-stopped
     profiles: ["redis"]
-    command: ["redis-server", "--appendonly", "yes"]
+    # --maxmemory kept below the container's hard memory limit so Redis
+    # evicts keys on its own terms instead of getting OOM-killed by cgroups.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
 volumes:
   redis-data:
