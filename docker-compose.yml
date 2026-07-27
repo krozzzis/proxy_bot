@@ -20,6 +20,18 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    # Pinned explicitly: some hosts default the Docker daemon to the
+    # "journald" driver, which has a reader-attachment race that can make
+    # `docker logs`/`docker compose logs` show nothing for a container after
+    # it's recreated under the same name (confirmed directly - the data is
+    # present in the journal via `journalctl`, `docker logs` just misses it).
+    # json-file doesn't have this race. This service is the only one Watchtower
+    # ever recreates, so it's the only one that actually hits this.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -58,6 +70,11 @@ services:
       DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.41}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -87,6 +104,11 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
