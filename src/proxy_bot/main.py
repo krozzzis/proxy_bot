@@ -55,6 +55,7 @@ async def run() -> None:
     bot = Bot(token=config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=build_fsm_storage(config))
     dp["storage"] = storage
+    dp["dispatcher"] = dp
 
     i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale)
     i18n_middleware.setup(dispatcher=dp)

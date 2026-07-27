@@ -44,7 +44,6 @@ help-admin-suffix =
 
 unknown-command = Неизвестная команда. Отправьте /help, чтобы увидеть список доступных команд.
 unknown-message = Не понимаю это сообщение. Чтобы ввести код доступа, отправьте /code.
-dialog-unknown-intent = Это меню больше не активно (например, бот перезапускался). Отправьте /start или /help.
 
 broadcast-prefix = :loudspeaker: <b>Сообщение от администрации</b>
 
