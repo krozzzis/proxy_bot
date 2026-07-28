@@ -13,6 +13,8 @@ wheels/
 .env
 data/
 logs/
+*.session
+*.session-journal
 
 # Nix
 .direnv/

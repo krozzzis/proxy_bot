@@ -8,3 +8,5 @@ __pycache__
 *.pyc
 flake.nix
 flake.lock
+
+*.session

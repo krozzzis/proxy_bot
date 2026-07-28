@@ -16,6 +16,9 @@
           packages = [
             pkgs.python312
             pkgs.uv
+            # rsvg-convert, used by scripts/generate_emoji_pack.py to render
+            # the custom-emoji icon pack from SVG to PNG.
+            pkgs.librsvg
           ];
 
           env = {

@@ -22,6 +22,12 @@ dependencies = [
 [project.scripts]
 proxy-bot = "proxy_bot:main"
 
+[dependency-groups]
+# Only for scripts/generate_emoji_pack.py - not needed to run the bot itself.
+# Custom emoji packs must be created by a Telegram user account (Premium
+# required), not a bot, hence Telethon (MTProto/user API) instead of aiogram.
+emoji-pack = ["telethon>=1.36"]
+
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
 build-backend = "uv_build"
