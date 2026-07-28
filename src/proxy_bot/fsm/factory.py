@@ -16,10 +16,14 @@ def build_fsm_storage(config: Config) -> BaseStorage:
     if config.fsm_backend == "redis":
         if not config.redis_url:
             raise RuntimeError("REDIS_URL is required when FSM_BACKEND=redis")
+        from aiogram.fsm.storage.base import DefaultKeyBuilder
         from aiogram.fsm.storage.redis import RedisStorage
 
         logger.info("Using Redis FSM storage")
-        return RedisStorage.from_url(config.redis_url)
+        # aiogram_dialog keys its stack storage by "destiny" (a namespace
+        # separate from plain FSM state/data) - the default key builder
+        # doesn't support that dimension and raises on first use.
+        return RedisStorage.from_url(config.redis_url, key_builder=DefaultKeyBuilder(with_destiny=True))
 
     if config.fsm_backend != "sqlite":
         raise RuntimeError(f"Unknown FSM_BACKEND {config.fsm_backend!r}, expected 'sqlite' or 'redis'")
