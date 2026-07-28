@@ -6,6 +6,8 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import ErrorEvent, Message, Update
+from aiogram_dialog.api.entities import Stack
+from aiogram_dialog.context.storage import StorageProxy
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +19,28 @@ async def _reopen_main_menu(dispatcher: Dispatcher, bot: Bot, fake_update: Updat
         logger.exception("Failed to reopen main menu after a stale dialog event")
 
 
-async def on_unknown_dialog_event(event: ErrorEvent, bot: Bot, dispatcher: Dispatcher) -> None:
-    """Handles stale dialog callbacks/state, e.g. after a bot restart or a
+async def on_unknown_dialog_event(
+    event: ErrorEvent,
+    bot: Bot,
+    dispatcher: Dispatcher,
+    aiogd_stack: Stack | None = None,
+    aiogd_storage_proxy: StorageProxy | None = None,
+) -> None:
+    """Handles stale dialog callbacks/state, e.g. after a bot restart, a
     RESET_STACK elsewhere leaving an older message's buttons pointing at a
-    now-invalid intent.
+    now-invalid intent, or a code change that renamed/removed a dialog
+    state a user was sitting in.
 
     Registered directly on the Dispatcher's `errors` observer (not a nested
     Router) so it runs inside aiogram-dialog's IntentErrorMiddleware, which
-    repairs the corrupted dialog stack before this handler runs.
+    injects `aiogd_stack`/`aiogd_storage_proxy` into this handler's data -
+    and, for UnknownIntent/OutdatedIntent, repairs the corrupted stack
+    itself. It does NOT do that for UnknownState (see
+    IntentErrorMiddleware.__call__: `context = None` is set but the broken
+    stack is saved back unchanged) - so without the explicit reset below,
+    the synthetic "/start" fed at the end of this handler hits the exact
+    same UnknownState on the exact same stale stack and re-triggers this
+    handler again, forever.
 
     Rather than showing an error message, just reopen the main menu - the
     user shouldn't have to know or care that their old message went stale.
@@ -36,6 +52,11 @@ async def on_unknown_dialog_event(event: ErrorEvent, bot: Bot, dispatcher: Dispa
     aiogram-i18n's locale lookup (which requires "state") crashes.
     """
     logger.warning("Stale dialog event: %s", event.exception)
+
+    if aiogd_stack is not None and aiogd_storage_proxy is not None:
+        while not aiogd_stack.empty():
+            await aiogd_storage_proxy.remove_context(aiogd_stack.pop())
+        await aiogd_storage_proxy.save_stack(aiogd_stack)
 
     update = event.update
     if update.callback_query is not None:
