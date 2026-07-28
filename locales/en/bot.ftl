@@ -3,14 +3,14 @@
 start-prompt-code = Enter the access code you were given.
 
 menu-title-greeting =
-    { "" }[tg_emoji:5422857065485870512:wave] Hello, { $name }!
+    { "" }[tg_emoji:5424978921064013406:wave] Hello, { $name }!
 
-    { "" }[tg_emoji:5422842084639940684:clipboard] <b>Personal cabinet</b>
+    { "" }[tg_emoji:5424716580166607793:clipboard] <b>Personal cabinet</b>
     Active codes: { $count }
 
     Choose an action:
 menu-title =
-    { "" }[tg_emoji:5422842084639940684:clipboard] <b>Personal cabinet</b>
+    { "" }[tg_emoji:5424716580166607793:clipboard] <b>Personal cabinet</b>
     Active codes: { $count }
 
     Choose an action:
@@ -20,15 +20,15 @@ menu-btn-help = Help
 menu-btn-back = Back
 menu-btn-admin = Admin panel
 
-code-invalid = [tg_emoji:5424999841849712198:x] Code not found. Check it and try again.
-code-banned = [tg_emoji:5424849539469189027:no_entry_sign] Your account has been banned by an administrator. Please contact support.
-code-already-added = [tg_emoji:5422716177673659074:white_check_mark] This code is already linked to your account.
-code-accepted = [tg_emoji:5422716177673659074:white_check_mark] <b>Code accepted!</b>
+code-invalid = [tg_emoji:5422848570040558416:x] Code not found. Check it and try again.
+code-banned = [tg_emoji:5424910789997797782:no_entry_sign] Your account has been banned by an administrator. Please contact support.
+code-already-added = [tg_emoji:5422382480189599565:white_check_mark] This code is already linked to your account.
+code-accepted = [tg_emoji:5422382480189599565:white_check_mark] <b>Code accepted!</b>
 code-prompt-again = Enter another access code.
 
-link-header = [tg_emoji:5425059460290748236:key] <b>Your links</b>
+link-header = [tg_emoji:5424947786846085477:key] <b>Your links</b>
 link-item =
-    { "" }[tg_emoji:5424972281044573802:small_blue_diamond] <b>{ $description }</b>
+    { "" }[tg_emoji:5424983971945553033:small_blue_diamond] <b>{ $description }</b>
     Code: <code>{ $code }</code>
 
     { $links }
@@ -50,7 +50,7 @@ help-admin-suffix =
 unknown-command = Unknown command. Send /help to see the list of available commands.
 unknown-message = I don't understand this message. Send /code to enter an access code.
 
-broadcast-prefix = [tg_emoji:5425041283989154189:loudspeaker] <b>Message from the administration</b>
+broadcast-prefix = [tg_emoji:5422785094718894954:loudspeaker] <b>Message from the administration</b>
 
 yes = Yes
 no = No
@@ -59,7 +59,7 @@ no = No
 
 admin-only = This command is available to administrators only.
 admin-menu-title =
-    { "" }[tg_emoji:5422765402293839322:gear] <b>Admin panel</b>
+    { "" }[tg_emoji:5424814720169322177:gear] <b>Admin panel</b>
 
     Choose an action:
 admin-btn-create-code = Create code
@@ -69,6 +69,8 @@ admin-btn-admins = Admins
 admin-btn-broadcast = Broadcast
 admin-btn-close = Back
 admin-btn-back = Back
+admin-btn-prev = Prev
+admin-btn-next = Next
 admin-btn-cancel = Cancel
 admin-btn-confirm = Confirm
 admin-btn-done = Done
@@ -80,13 +82,13 @@ admin-create-code-exists = This code already exists. Enter another one.
 admin-create-code-prompt-link = Send a link. You can add several — this message reappears after each one.
 admin-create-code-links-added = Links added: { $count }
 admin-create-code-prompt-description = Enter a description for the code (or "-" to skip):
-admin-create-code-done = [tg_emoji:5422716177673659074:white_check_mark] Code "{ $code }" created.
+admin-create-code-done = [tg_emoji:5422382480189599565:white_check_mark] Code "{ $code }" created.
 
-admin-codes-title = [tg_emoji:5422753565363971729:package] <b>Codes</b> ({ $count })
+admin-codes-title = [tg_emoji:5425024619516044042:package] <b>Codes</b> ({ $count })
 admin-codes-empty = There are no codes yet.
 admin-codes-item = { $code } — { $description } ({ $count } links)
 admin-code-detail-title =
-    { "" }[tg_emoji:5422753565363971729:package] Code: <b>{ $code }</b>
+    { "" }[tg_emoji:5425024619516044042:package] Code: <b>{ $code }</b>
     Description: { $description }
 admin-code-no-links = No links yet.
 admin-code-remove-link-btn = Remove link #{ $n }
@@ -95,16 +97,16 @@ admin-btn-add-link = Add link
 admin-btn-edit-description = Edit description
 admin-btn-delete-code = Delete code
 admin-code-add-link-prompt = Send a new link for this code.
-admin-code-link-added = [tg_emoji:5422716177673659074:white_check_mark] Link added.
+admin-code-link-added = [tg_emoji:5422382480189599565:white_check_mark] Link added.
 admin-code-edit-description-prompt = Send a new description (or "-" to clear it).
-admin-code-description-updated = [tg_emoji:5422716177673659074:white_check_mark] Description updated.
+admin-code-description-updated = [tg_emoji:5422382480189599565:white_check_mark] Description updated.
 admin-code-deleted = Code "{ $code }" and all its links have been deleted.
 
-admin-users-title = [tg_emoji:5424676319143174198:bust_in_silhouette] <b>Users</b> ({ $count })
+admin-users-title = [tg_emoji:5422406733869920062:bust_in_silhouette] <b>Users</b> ({ $count })
 admin-users-empty = There are no users yet.
 admin-users-item = { $name } (id { $id }) — codes: { $count }
 admin-user-detail-title =
-    { "" }[tg_emoji:5424676319143174198:bust_in_silhouette] <b>{ $name }</b>
+    { "" }[tg_emoji:5422406733869920062:bust_in_silhouette] <b>{ $name }</b>
     ID: <code>{ $id }</code>
     Banned: { $banned }
 admin-user-codes-none = This user has no activated codes.
@@ -113,23 +115,23 @@ admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = Ban user
 admin-user-unban-btn = Unban user
 
-admin-admins-title = [tg_emoji:5424784870146611833:shield] <b>Administrators</b>
+admin-admins-title = [tg_emoji:5422562473679037332:shield] <b>Administrators</b>
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Add administrator
 admin-add-admin-prompt = Send the numeric Telegram ID of the new administrator.
 admin-add-admin-invalid = Invalid ID. Send a number — the user's Telegram ID.
 admin-add-admin-already = This user is already an administrator.
-admin-add-admin-done = [tg_emoji:5422716177673659074:white_check_mark] User { $id } is now an administrator.
+admin-add-admin-done = [tg_emoji:5422382480189599565:white_check_mark] User { $id } is now an administrator.
 
-admin-broadcast-target-prompt = [tg_emoji:5425041283989154189:loudspeaker] Who should receive the message?
+admin-broadcast-target-prompt = [tg_emoji:5422785094718894954:loudspeaker] Who should receive the message?
 admin-broadcast-target-all = All users
 admin-broadcast-target-code = By code
 admin-broadcast-choose-code = Choose a code:
 admin-broadcast-no-codes = There are no codes yet.
 admin-broadcast-prompt-text = Enter the broadcast message text:
 admin-broadcast-confirm =
-    { "" }[tg_emoji:5425041283989154189:loudspeaker] Send this message to { $count } users?
+    { "" }[tg_emoji:5422785094718894954:loudspeaker] Send this message to { $count } users?
 
     { $text }
-admin-broadcast-done = [tg_emoji:5422716177673659074:white_check_mark] Broadcast finished: { $sent } delivered, { $failed } failed.
+admin-broadcast-done = [tg_emoji:5422382480189599565:white_check_mark] Broadcast finished: { $sent } delivered, { $failed } failed.
 admin-broadcast-empty = No recipients for this broadcast.

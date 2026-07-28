@@ -43,11 +43,16 @@ async def codes_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
         }
         for c in chunk
     ]
-    title = i18n.get("admin-codes-title", count=len(codes)) if codes else i18n.get("admin-codes-empty")
+    if codes:
+        title = f"{i18n.get('admin-codes-title', count=len(codes))}  ({page + 1}/{total_pages})"
+    else:
+        title = i18n.get("admin-codes-empty")
     return {
-        "title": f"{title}  ({page + 1}/{total_pages})",
+        "title": title,
         "codes": items,
         "back": i18n.get("admin-btn-back"),
+        "prev": i18n.get("admin-btn-prev"),
+        "next": i18n.get("admin-btn-next"),
     }
 
 
@@ -195,8 +200,8 @@ def codes_dialog() -> Dialog:
                 ),
             ),
             Row(
-                Button(Format("◀"), id="prev_page", on_click=on_prev_page),
-                Button(Format("▶"), id="next_page", on_click=on_next_page),
+                Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
+                Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
             ),
             Cancel(Format("{back}"), style=icon("arrow_backward")),
             state=AdminCodes.list,

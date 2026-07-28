@@ -29,6 +29,15 @@ Environment:
 
 Usage:
     uv run --group emoji-pack scripts/generate_emoji_pack.py --recreate
+
+--recreate deletes the existing set *before* uploading the new one (Telegram
+won't let you create a set under a short_name that's still in use, so there's
+no way to upload-then-swap). If a run fails partway - as
+StickerEmojiInvalidError once did here, from an icon whose shortcode isn't a
+real emoji alias - the pack is left deleted and every id in CUSTOM_EMOJI and
+the .ftl files is dangling. Re-run (no --recreate needed, there's nothing
+left to delete) and copy the freshly printed ids over the old ones in both
+places before considering the job done.
 """
 
 from __future__ import annotations
@@ -52,6 +61,8 @@ import emoji as emoji_lib
 ICONS: dict[str, tuple[str, str]] = {
     "arrow_backward": ("arrow_back", "blue"),
     "bust_in_silhouette": ("person", "blue"),
+    "chevron_left": ("chevron_left", "blue"),
+    "chevron_right": ("chevron_right", "blue"),
     "clipboard": ("assignment", "blue"),
     "gear": ("settings", "blue"),
     "heavy_plus_sign": ("add", "blue"),
@@ -71,6 +82,15 @@ ICONS: dict[str, tuple[str, str]] = {
     "x": ("close", "red"),
 }
 
+# chevron_left/right aren't real :shortcode: emoji aliases (the `emoji`
+# package has none), and Telegram's createStickerSet rejects an item whose
+# "emoji" field isn't an actual emoji character - so these two need an
+# explicit fallback instead of being emojized from their own name.
+FALLBACK_OVERRIDES = {
+    "chevron_left": "◀️",
+    "chevron_right": "▶️",
+}
+
 COLORS = {
     "blue": "#3B82F6",
     "green": "#22C55E",
@@ -79,15 +99,12 @@ COLORS = {
 
 MATERIAL_ICON_URL = "https://cdn.jsdelivr.net/npm/@material-design-icons/svg@latest/filled/{name}.svg"
 
-# Telegram renders a custom emoji's full 100x100 canvas at roughly the
-# height of a text line, but ordinary emoji glyphs only use ~75-80% of that
-# box for visible ink. A badge that fills the canvas edge-to-edge reads
-# visibly taller than surrounding text and overlaps the line above/below -
-# so the opaque badge gets real padding to match normal emoji sizing.
+# No background badge - a colored square behind the glyph read as visibly
+# taller/heavier than surrounding text and made the icon itself harder to
+# read at a glance. Just the glyph, in its category color, on a transparent
+# canvas - closer to how a normal colored Unicode emoji sits in text.
 CANVAS = 100
-BADGE_SIZE = 72
-BADGE_RADIUS = 17
-ICON_SIZE = 42
+ICON_SIZE = 64
 
 DEFAULT_TITLE = "LPR Proxy Bot Icons"
 DEFAULT_SHORT_NAME = "lprproxy_icons"
@@ -101,12 +118,10 @@ def fetch_icon_svg(material_name: str) -> str:
 
 def build_badge_svg(icon_svg: str, color: str) -> str:
     inner = re.search(r"<svg[^>]*>(.*)</svg>", icon_svg, re.S).group(1).strip()
-    badge_offset = (CANVAS - BADGE_SIZE) / 2
     icon_offset = (CANVAS - ICON_SIZE) / 2
     icon_scale = ICON_SIZE / 24
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS}" height="{CANVAS}" viewBox="0 0 {CANVAS} {CANVAS}">
-  <rect x="{badge_offset:.3f}" y="{badge_offset:.3f}" width="{BADGE_SIZE}" height="{BADGE_SIZE}" rx="{BADGE_RADIUS}" ry="{BADGE_RADIUS}" fill="{color}"/>
-  <g transform="translate({icon_offset:.3f},{icon_offset:.3f}) scale({icon_scale:.5f})" fill="#FFFFFF">
+  <g transform="translate({icon_offset:.3f},{icon_offset:.3f}) scale({icon_scale:.5f})" fill="{color}">
     {inner}
   </g>
 </svg>
@@ -162,7 +177,7 @@ async def upload_pack(pngs: dict[str, Path], title: str, short_name: str, recrea
     items = []
     order = []
     for shortcode, png_path in pngs.items():
-        fallback = emoji_lib.emojize(f":{shortcode}:", language="alias")
+        fallback = FALLBACK_OVERRIDES.get(shortcode) or emoji_lib.emojize(f":{shortcode}:", language="alias")
         uploaded = await client.upload_file(str(png_path))
         media = types.InputMediaUploadedDocument(
             file=uploaded,
