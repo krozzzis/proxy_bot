@@ -3,7 +3,6 @@
 start-prompt-code = Введите код доступа, который вам выдали.
 
 menu-title-greeting =
-    { "" }[tg_emoji:5424676319143174198:bust_in_silhouette] ID: <code>{ $id }</code>
     { "" }[tg_emoji:5422857065485870512:wave] Здравствуйте, { $name }!
 
     { "" }[tg_emoji:5422842084639940684:clipboard] <b>Личный кабинет</b>
@@ -11,7 +10,6 @@ menu-title-greeting =
 
     Выберите действие:
 menu-title =
-    { "" }[tg_emoji:5424676319143174198:bust_in_silhouette] ID: <code>{ $id }</code>
     { "" }[tg_emoji:5422842084639940684:clipboard] <b>Личный кабинет</b>
     Активных кодов: { $count }
 
@@ -70,11 +68,11 @@ admin-btn-users = Пользователи
 admin-btn-admins = Администраторы
 admin-btn-broadcast = Рассылка
 admin-btn-close = Назад
-admin-btn-back = :arrow_backward: Назад
-admin-btn-cancel = :x: Отмена
-admin-btn-confirm = :white_check_mark: Подтвердить
-admin-btn-done = :white_check_mark: Готово
-admin-btn-undo = :leftwards_arrow_with_hook: Отменить последнюю
+admin-btn-back = Назад
+admin-btn-cancel = Отмена
+admin-btn-confirm = Подтвердить
+admin-btn-done = Готово
+admin-btn-undo = Отменить последнюю
 
 admin-create-code-prompt-code = Введите новый код (латиница, цифры, "-" или "_", до 32 символов):
 admin-create-code-invalid = Недопустимый формат кода. Используйте латиницу, цифры, "-" или "_", не длиннее 32 символов.
@@ -86,16 +84,16 @@ admin-create-code-done = [tg_emoji:5422716177673659074:white_check_mark] Код 
 
 admin-codes-title = [tg_emoji:5422753565363971729:package] <b>Коды</b> ({ $count })
 admin-codes-empty = Пока нет ни одного кода.
-admin-codes-item = { $code } — { $description } ({ $count } :link:)
+admin-codes-item = { $code } — { $description } ({ $count } ссылок)
 admin-code-detail-title =
     { "" }[tg_emoji:5422753565363971729:package] Код: <b>{ $code }</b>
     Описание: { $description }
 admin-code-no-links = Ссылок пока нет.
-admin-code-remove-link-btn = :x: Удалить ссылку #{ $n }
+admin-code-remove-link-btn = Удалить ссылку #{ $n }
 admin-code-link-removed = Ссылка удалена.
-admin-btn-add-link = :heavy_plus_sign: Добавить ссылку
-admin-btn-edit-description = :pencil2: Изменить описание
-admin-btn-delete-code = :wastebasket: Удалить код
+admin-btn-add-link = Добавить ссылку
+admin-btn-edit-description = Изменить описание
+admin-btn-delete-code = Удалить код
 admin-code-add-link-prompt = Отправьте новую ссылку для этого кода.
 admin-code-link-added = [tg_emoji:5422716177673659074:white_check_mark] Ссылка добавлена.
 admin-code-edit-description-prompt = Отправьте новое описание (или «-», чтобы очистить).
@@ -110,14 +108,14 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Забанен: { $banned }
 admin-user-codes-none = У пользователя нет активированных кодов.
-admin-user-revoke-btn = :x: Отобрать «{ $code }»
+admin-user-revoke-btn = Отобрать «{ $code }»
 admin-user-revoke-done = Код «{ $code }» отобран у пользователя { $id }.
-admin-user-ban-btn = :no_entry_sign: Забанить пользователя
-admin-user-unban-btn = :white_check_mark: Разбанить пользователя
+admin-user-ban-btn = Забанить пользователя
+admin-user-unban-btn = Разбанить пользователя
 
 admin-admins-title = [tg_emoji:5424784870146611833:shield] <b>Администраторы</b>
 admin-admins-item = { $name } (id { $id })
-admin-btn-add-admin = :heavy_plus_sign: Добавить администратора
+admin-btn-add-admin = Добавить администратора
 admin-add-admin-prompt = Отправьте числовой Telegram ID нового администратора.
 admin-add-admin-invalid = Некорректный ID. Отправьте число — Telegram ID пользователя.
 admin-add-admin-already = Этот пользователь уже администратор.

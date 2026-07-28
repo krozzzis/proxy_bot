@@ -7,13 +7,14 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
-from ..common import not_a_command
+from ..common import icon, not_a_command
 from ..states import AdminCreateCode
 
 logger = logging.getLogger(__name__)
@@ -110,23 +111,23 @@ def create_code_dialog() -> Dialog:
         Window(
             Format("{prompt}"),
             TextInput(id="cc_code", on_success=on_code_input, filter=not_a_command),
-            Cancel(Format("{cancel}")),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminCreateCode.enter_code,
             getter=step_code_getter,
         ),
         Window(
             Format("{prompt}"),
             TextInput(id="cc_link", on_success=on_link_added, filter=not_a_command),
-            Button(Format("{undo}"), id="undo_link", on_click=on_undo_last_link, when="has_links"),
-            Button(Format("{done}"), id="links_done", on_click=on_links_done, when="has_links"),
-            Cancel(Format("{cancel}")),
+            Button(Format("{undo}"), id="undo_link", on_click=on_undo_last_link, when="has_links", style=icon("leftwards_arrow_with_hook")),
+            Button(Format("{done}"), id="links_done", on_click=on_links_done, when="has_links", style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminCreateCode.enter_links,
             getter=step_links_getter,
         ),
         Window(
             Format("{prompt}"),
             TextInput(id="cc_desc", on_success=on_description_input, filter=not_a_command),
-            Cancel(Format("{cancel}")),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminCreateCode.enter_description,
             getter=step_description_getter,
         ),

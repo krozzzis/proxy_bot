@@ -5,13 +5,21 @@ import logging
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
+from ..common import icon
 from ..states import AdminUsers
+
+# Ban/unban share one button slot whose icon+color follow the user's
+# current state - unbanning (banned=True) reads as the positive action.
+_BAN_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="not_banned") | icon(
+    "white_check_mark", ButtonStyle.SUCCESS, when="banned"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,16 +81,30 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
     user = await storage.users.get(user_id) if user_id is not None else None
 
     if user is None:
-        return {"title": i18n.get("admin-users-empty"), "codes": [], "back": i18n.get("admin-btn-back")}
+        return {
+            "title": i18n.get("admin-users-empty"),
+            "codes": [],
+            "back": i18n.get("admin-btn-back"),
+            "ban_btn": "",
+            "banned": False,
+            "not_banned": True,
+        }
 
     name = _display_name(user.username, user.full_name, user.user_id)
-    banned = i18n.get("yes") if user.banned else i18n.get("no")
-    title = i18n.get("admin-user-detail-title", name=esc(name), id=str(user.user_id), banned=banned)
+    banned_label = i18n.get("yes") if user.banned else i18n.get("no")
+    title = i18n.get("admin-user-detail-title", name=esc(name), id=str(user.user_id), banned=banned_label)
     codes = [{"id": code, "label": i18n.get("admin-user-revoke-btn", code=code)} for code in user.codes]
     if not codes:
         title = f"{title}\n\n{i18n.get('admin-user-codes-none')}"
     ban_btn = i18n.get("admin-user-unban-btn") if user.banned else i18n.get("admin-user-ban-btn")
-    return {"title": title, "codes": codes, "back": i18n.get("admin-btn-back"), "ban_btn": ban_btn}
+    return {
+        "title": title,
+        "codes": codes,
+        "back": i18n.get("admin-btn-back"),
+        "ban_btn": ban_btn,
+        "banned": user.banned,
+        "not_banned": not user.banned,
+    }
 
 
 async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
@@ -130,13 +152,14 @@ def users_dialog() -> Dialog:
                     item_id_getter=lambda item: item["id"],
                     items="users",
                     on_click=on_user_selected,
+                    style=icon("bust_in_silhouette"),
                 ),
             ),
             Row(
                 Button(Format("◀"), id="prev_page", on_click=on_prev_page),
                 Button(Format("▶"), id="next_page", on_click=on_next_page),
             ),
-            Cancel(Format("{back}")),
+            Cancel(Format("{back}"), style=icon("arrow_backward")),
             state=AdminUsers.list,
             getter=users_list_getter,
         ),
@@ -149,10 +172,11 @@ def users_dialog() -> Dialog:
                     item_id_getter=lambda item: item["id"],
                     items="codes",
                     on_click=on_revoke_code,
+                    style=icon("x", ButtonStyle.DANGER),
                 ),
             ),
-            Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban),
-            Button(Format("{back}"), id="back_to_list", on_click=back_to_list),
+            Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban, style=_BAN_TOGGLE_STYLE),
+            Button(Format("{back}"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
             state=AdminUsers.detail,
             getter=users_detail_getter,
         ),

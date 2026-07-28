@@ -3,7 +3,6 @@
 start-prompt-code = Enter the access code you were given.
 
 menu-title-greeting =
-    { "" }[tg_emoji:5424676319143174198:bust_in_silhouette] ID: <code>{ $id }</code>
     { "" }[tg_emoji:5422857065485870512:wave] Hello, { $name }!
 
     { "" }[tg_emoji:5422842084639940684:clipboard] <b>Personal cabinet</b>
@@ -11,7 +10,6 @@ menu-title-greeting =
 
     Choose an action:
 menu-title =
-    { "" }[tg_emoji:5424676319143174198:bust_in_silhouette] ID: <code>{ $id }</code>
     { "" }[tg_emoji:5422842084639940684:clipboard] <b>Personal cabinet</b>
     Active codes: { $count }
 
@@ -70,11 +68,11 @@ admin-btn-users = Users
 admin-btn-admins = Admins
 admin-btn-broadcast = Broadcast
 admin-btn-close = Back
-admin-btn-back = :arrow_backward: Back
-admin-btn-cancel = :x: Cancel
-admin-btn-confirm = :white_check_mark: Confirm
-admin-btn-done = :white_check_mark: Done
-admin-btn-undo = :leftwards_arrow_with_hook: Undo last
+admin-btn-back = Back
+admin-btn-cancel = Cancel
+admin-btn-confirm = Confirm
+admin-btn-done = Done
+admin-btn-undo = Undo last
 
 admin-create-code-prompt-code = Enter a new code (letters, digits, "-" or "_", up to 32 characters):
 admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_", no longer than 32 characters.
@@ -86,16 +84,16 @@ admin-create-code-done = [tg_emoji:5422716177673659074:white_check_mark] Code "{
 
 admin-codes-title = [tg_emoji:5422753565363971729:package] <b>Codes</b> ({ $count })
 admin-codes-empty = There are no codes yet.
-admin-codes-item = { $code } — { $description } ({ $count } :link:)
+admin-codes-item = { $code } — { $description } ({ $count } links)
 admin-code-detail-title =
     { "" }[tg_emoji:5422753565363971729:package] Code: <b>{ $code }</b>
     Description: { $description }
 admin-code-no-links = No links yet.
-admin-code-remove-link-btn = :x: Remove link #{ $n }
+admin-code-remove-link-btn = Remove link #{ $n }
 admin-code-link-removed = Link removed.
-admin-btn-add-link = :heavy_plus_sign: Add link
-admin-btn-edit-description = :pencil2: Edit description
-admin-btn-delete-code = :wastebasket: Delete code
+admin-btn-add-link = Add link
+admin-btn-edit-description = Edit description
+admin-btn-delete-code = Delete code
 admin-code-add-link-prompt = Send a new link for this code.
 admin-code-link-added = [tg_emoji:5422716177673659074:white_check_mark] Link added.
 admin-code-edit-description-prompt = Send a new description (or "-" to clear it).
@@ -110,14 +108,14 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Banned: { $banned }
 admin-user-codes-none = This user has no activated codes.
-admin-user-revoke-btn = :x: Revoke "{ $code }"
+admin-user-revoke-btn = Revoke "{ $code }"
 admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
-admin-user-ban-btn = :no_entry_sign: Ban user
-admin-user-unban-btn = :white_check_mark: Unban user
+admin-user-ban-btn = Ban user
+admin-user-unban-btn = Unban user
 
 admin-admins-title = [tg_emoji:5424784870146611833:shield] <b>Administrators</b>
 admin-admins-item = { $name } (id { $id })
-admin-btn-add-admin = :heavy_plus_sign: Add administrator
+admin-btn-add-admin = Add administrator
 admin-add-admin-prompt = Send the numeric Telegram ID of the new administrator.
 admin-add-admin-invalid = Invalid ID. Send a number — the user's Telegram ID.
 admin-add-admin-already = This user is already an administrator.

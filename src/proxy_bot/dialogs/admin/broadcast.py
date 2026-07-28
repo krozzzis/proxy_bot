@@ -8,13 +8,14 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Select, SwitchTo
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage, User
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
-from ..common import not_a_command
+from ..common import icon, not_a_command
 from ..states import AdminBroadcast
 
 logger = logging.getLogger(__name__)
@@ -121,9 +122,9 @@ def broadcast_dialog() -> Dialog:
     return Dialog(
         Window(
             Format("{prompt}"),
-            Button(Format("{target_all}"), id="target_all", on_click=choose_all),
-            Button(Format("{target_code}"), id="target_code", on_click=choose_by_code),
-            Cancel(Format("{cancel}")),
+            Button(Format("{target_all}"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
+            Button(Format("{target_code}"), id="target_code", on_click=choose_by_code, style=icon("package")),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminBroadcast.choose_target,
             getter=choose_target_getter,
         ),
@@ -135,22 +136,23 @@ def broadcast_dialog() -> Dialog:
                 item_id_getter=lambda item: item["id"],
                 items="codes",
                 on_click=on_code_chosen,
+                style=icon("package"),
             ),
-            SwitchTo(Format("{back}"), id="back_to_target", state=AdminBroadcast.choose_target),
+            SwitchTo(Format("{back}"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
             state=AdminBroadcast.choose_code,
             getter=choose_code_getter,
         ),
         Window(
             Format("{prompt}"),
             TextInput(id="broadcast_text", on_success=on_text_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_target2", state=AdminBroadcast.choose_target),
+            SwitchTo(Format("{back}"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
             state=AdminBroadcast.enter_text,
             getter=enter_text_getter,
         ),
         Window(
             Format("{confirm_text}"),
-            Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send),
-            Cancel(Format("{cancel}")),
+            Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminBroadcast.confirm,
             getter=confirm_getter,
         ),

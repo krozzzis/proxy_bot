@@ -6,13 +6,14 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, SwitchTo
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
-from ..common import not_a_command
+from ..common import icon, not_a_command
 from ..states import AdminCodes
 
 logger = logging.getLogger(__name__)
@@ -190,13 +191,14 @@ def codes_dialog() -> Dialog:
                     item_id_getter=lambda item: item["id"],
                     items="codes",
                     on_click=on_code_selected,
+                    style=icon("package"),
                 ),
             ),
             Row(
                 Button(Format("◀"), id="prev_page", on_click=on_prev_page),
                 Button(Format("▶"), id="next_page", on_click=on_next_page),
             ),
-            Cancel(Format("{back}")),
+            Cancel(Format("{back}"), style=icon("arrow_backward")),
             state=AdminCodes.list,
             getter=codes_list_getter,
         ),
@@ -209,26 +211,27 @@ def codes_dialog() -> Dialog:
                     item_id_getter=lambda item: item["id"],
                     items="link_items",
                     on_click=on_remove_link,
+                    style=icon("x", ButtonStyle.DANGER),
                 ),
             ),
-            Button(Format("{add_link}"), id="add_link", on_click=open_add_link),
-            Button(Format("{edit_description}"), id="edit_description", on_click=open_edit_description),
-            Button(Format("{delete_code}"), id="delete_code", on_click=on_delete_code),
-            SwitchTo(Format("{back}"), id="back_to_list", state=AdminCodes.list),
+            Button(Format("{add_link}"), id="add_link", on_click=open_add_link, style=icon("heavy_plus_sign")),
+            Button(Format("{edit_description}"), id="edit_description", on_click=open_edit_description, style=icon("pencil2")),
+            Button(Format("{delete_code}"), id="delete_code", on_click=on_delete_code, style=icon("wastebasket", ButtonStyle.DANGER)),
+            SwitchTo(Format("{back}"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
             state=AdminCodes.detail,
             getter=codes_detail_getter,
         ),
         Window(
             Format("{prompt}"),
             TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_detail", state=AdminCodes.detail),
+            SwitchTo(Format("{back}"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
             state=AdminCodes.enter_link,
             getter=enter_link_getter,
         ),
         Window(
             Format("{prompt}"),
             TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_detail2", state=AdminCodes.detail),
+            SwitchTo(Format("{back}"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
             state=AdminCodes.edit_description,
             getter=edit_description_getter,
         ),

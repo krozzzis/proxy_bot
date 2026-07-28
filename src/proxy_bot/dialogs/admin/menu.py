@@ -3,15 +3,10 @@ from __future__ import annotations
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Group
-from aiogram_dialog.widgets.style.base import ButtonStyle, Style
 from aiogram_dialog.widgets.text import Format
 
-from ..common import CUSTOM_EMOJI
+from ..common import icon
 from ..states import AdminAdmins, AdminBroadcast, AdminCodes, AdminCreateCode, AdminMenu, AdminUsers, UserMenu
-
-
-def _icon(name: str) -> Style:
-    return Style(style=ButtonStyle.PRIMARY, emoji_id=CUSTOM_EMOJI[name])
 
 
 async def admin_menu_getter(i18n, **kwargs) -> dict:
@@ -62,14 +57,14 @@ def admin_menu_window() -> Window:
     return Window(
         Format("{title}"),
         Group(
-            Button(Format("{btn_create_code}"), id="create_code", on_click=open_create_code, style=_icon("heavy_plus_sign")),
-            Button(Format("{btn_codes}"), id="codes", on_click=open_codes, style=_icon("package")),
-            Button(Format("{btn_users}"), id="users", on_click=open_users, style=_icon("bust_in_silhouette")),
-            Button(Format("{btn_admins}"), id="admins", on_click=open_admins, style=_icon("shield")),
-            Button(Format("{btn_broadcast}"), id="broadcast", on_click=open_broadcast, style=_icon("loudspeaker")),
+            Button(Format("{btn_create_code}"), id="create_code", on_click=open_create_code, style=icon("heavy_plus_sign")),
+            Button(Format("{btn_codes}"), id="codes", on_click=open_codes, style=icon("package")),
+            Button(Format("{btn_users}"), id="users", on_click=open_users, style=icon("bust_in_silhouette")),
+            Button(Format("{btn_admins}"), id="admins", on_click=open_admins, style=icon("shield")),
+            Button(Format("{btn_broadcast}"), id="broadcast", on_click=open_broadcast, style=icon("loudspeaker")),
             width=2,
         ),
-        Button(Format("{btn_close}"), id="close", on_click=close_menu, style=_icon("arrow_backward")),
+        Button(Format("{btn_close}"), id="close", on_click=close_menu, style=icon("arrow_backward")),
         state=AdminMenu.main,
         getter=admin_menu_getter,
     )

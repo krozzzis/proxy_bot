@@ -7,7 +7,6 @@ from aiogram.types import Message, User
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Group, SwitchTo
-from aiogram_dialog.widgets.style.base import ButtonStyle, Style
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.storage import Code, Storage
@@ -15,17 +14,12 @@ from proxy_bot.utils.audit import actor
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 
-from .common import CUSTOM_EMOJI, not_a_command
+from .common import icon, not_a_command
 from .states import AdminMenu, UserMenu
-
 
 logger = logging.getLogger(__name__)
 
 ActivationStatus = Literal["banned", "invalid", "already", "added"]
-
-
-def _icon(name: str) -> Style:
-    return Style(style=ButtonStyle.PRIMARY, emoji_id=CUSTOM_EMOJI[name])
 
 
 async def _activate_code(storage: Storage, user: User, code_text: str) -> tuple[ActivationStatus, Code | None]:
@@ -103,14 +97,9 @@ async def main_menu_getter(
     # window, so the greeting doesn't repeat every time the user navigates
     # back to the main menu.
     if dialog_manager.dialog_data.pop("greet", False):
-        title = i18n.get(
-            "menu-title-greeting",
-            name=esc(event_from_user.full_name),
-            id=str(event_from_user.id),
-            count=len(db_user.codes),
-        )
+        title = i18n.get("menu-title-greeting", name=esc(event_from_user.full_name), count=len(db_user.codes))
     else:
-        title = i18n.get("menu-title", id=str(event_from_user.id), count=len(db_user.codes))
+        title = i18n.get("menu-title", count=len(db_user.codes))
     return {
         "title": title,
         "btn_enter_code": i18n.get("menu-btn-enter-code"),
@@ -210,7 +199,7 @@ def user_menu_dialog() -> Dialog:
             # single main-menu button between "Test" and "Manage
             # subscription" depending on account state.
             SwitchTo(
-                Format("{btn_links}"), id="primary_links", state=UserMenu.links, when="has_codes", style=_icon("key")
+                Format("{btn_links}"), id="primary_links", state=UserMenu.links, when="has_codes", style=icon("key")
             ),
             SwitchTo(
                 Format("{btn_enter_code}"),
@@ -218,7 +207,7 @@ def user_menu_dialog() -> Dialog:
                 state=UserMenu.enter_code,
                 on_click=on_open_enter_code,
                 when="no_codes",
-                style=_icon("heavy_plus_sign"),
+                style=icon("heavy_plus_sign"),
             ),
             Group(
                 SwitchTo(
@@ -227,15 +216,15 @@ def user_menu_dialog() -> Dialog:
                     state=UserMenu.enter_code,
                     on_click=on_open_enter_code,
                     when="has_codes",
-                    style=_icon("heavy_plus_sign"),
+                    style=icon("heavy_plus_sign"),
                 ),
                 SwitchTo(
-                    Format("{btn_links}"), id="open_links", state=UserMenu.links, when="no_codes", style=_icon("key")
+                    Format("{btn_links}"), id="open_links", state=UserMenu.links, when="no_codes", style=icon("key")
                 ),
-                SwitchTo(Format("{btn_help}"), id="open_help", state=UserMenu.help, style=_icon("question")),
+                SwitchTo(Format("{btn_help}"), id="open_help", state=UserMenu.help, style=icon("question")),
                 width=2,
             ),
-            Button(Format("{btn_admin}"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=_icon("gear")),
+            Button(Format("{btn_admin}"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("gear")),
             state=UserMenu.main,
             getter=main_menu_getter,
         ),
@@ -246,7 +235,7 @@ def user_menu_dialog() -> Dialog:
                 on_success=on_code_entered,
                 filter=not_a_command,
             ),
-            SwitchTo(Format("{back}"), id="back_to_menu", state=UserMenu.main, style=_icon("arrow_backward")),
+            SwitchTo(Format("{back}"), id="back_to_menu", state=UserMenu.main, style=icon("arrow_backward")),
             state=UserMenu.enter_code,
             getter=enter_code_getter,
         ),
@@ -257,15 +246,15 @@ def user_menu_dialog() -> Dialog:
                 id="open_enter_code_from_links",
                 state=UserMenu.enter_code,
                 on_click=on_open_enter_code,
-                style=_icon("heavy_plus_sign"),
+                style=icon("heavy_plus_sign"),
             ),
-            SwitchTo(Format("{back}"), id="back_to_menu2", state=UserMenu.main, style=_icon("arrow_backward")),
+            SwitchTo(Format("{back}"), id="back_to_menu2", state=UserMenu.main, style=icon("arrow_backward")),
             state=UserMenu.links,
             getter=links_getter,
         ),
         Window(
             Format("{title}"),
-            SwitchTo(Format("{back}"), id="back_to_menu3", state=UserMenu.main, style=_icon("arrow_backward")),
+            SwitchTo(Format("{back}"), id="back_to_menu3", state=UserMenu.main, style=icon("arrow_backward")),
             state=UserMenu.help,
             getter=help_getter,
         ),

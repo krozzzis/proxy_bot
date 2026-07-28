@@ -13,7 +13,7 @@ from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
-from ..common import not_a_command
+from ..common import icon, not_a_command
 from ..states import AdminAdmins
 
 logger = logging.getLogger(__name__)
@@ -73,8 +73,8 @@ def admins_dialog() -> Dialog:
     return Dialog(
         Window(
             Format("{title}"),
-            Button(Format("{add_admin}"), id="add_admin", on_click=open_enter_id),
-            Cancel(Format("{back}")),
+            Button(Format("{add_admin}"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
+            Cancel(Format("{back}"), style=icon("arrow_backward")),
             state=AdminAdmins.list,
             getter=admins_list_getter,
         ),
@@ -87,7 +87,7 @@ def admins_dialog() -> Dialog:
                 on_error=on_id_error,
                 filter=not_a_command,
             ),
-            SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list),
+            SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
             state=AdminAdmins.enter_id,
             getter=enter_id_getter,
         ),
