@@ -15,7 +15,7 @@ from proxy_bot.storage import Storage, User
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
-from ..common import accent, icon, not_a_command
+from ..common import icon, not_a_command
 from ..states import AdminBroadcast
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ def broadcast_dialog() -> Dialog:
             Format("{prompt}"),
             Button(Format("{target_all}"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
             Button(Format("{target_code}"), id="target_code", on_click=choose_by_code, style=icon("package")),
-            Cancel(Format("{cancel}"), style=accent(ButtonStyle.DANGER)),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminBroadcast.choose_target,
             getter=choose_target_getter,
         ),
@@ -152,7 +152,7 @@ def broadcast_dialog() -> Dialog:
         Window(
             Format("{confirm_text}"),
             Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-            Cancel(Format("{cancel}"), style=accent(ButtonStyle.DANGER)),
+            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
             state=AdminBroadcast.confirm,
             getter=confirm_getter,
         ),

@@ -7,6 +7,7 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
 from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.style.base import ButtonStyle
 
 from proxy_bot.commands import set_admin_commands
 from proxy_bot.storage import Storage
@@ -37,7 +38,7 @@ async def enter_id_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict
     prompt = i18n.get("admin-add-admin-prompt")
     if dialog_manager.dialog_data.get("id_error"):
         prompt = f"{i18n.get('admin-add-admin-invalid')}\n\n{prompt}"
-    return {"prompt": prompt, "back": i18n.get("admin-btn-back")}
+    return {"prompt": prompt, "cancel": i18n.get("admin-btn-cancel")}
 
 
 async def on_id_error(message: Message, widget: ManagedTextInput, manager: DialogManager, error: ValueError) -> None:
@@ -87,7 +88,11 @@ def admins_dialog() -> Dialog:
                 on_error=on_id_error,
                 filter=not_a_command,
             ),
-            SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
+            #SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
+            SwitchTo(Format("{cancel}"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
+
+            #Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+
             state=AdminAdmins.enter_id,
             getter=enter_id_getter,
         ),
