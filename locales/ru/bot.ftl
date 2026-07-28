@@ -41,8 +41,8 @@ help-text =
     /help — показать это сообщение
     /link — получить свои ссылки
     /code — ввести ещё один код
-help-admin-suffix =
 
+help-admin-suffix =
     <b>Команды администратора</b>
 
     /admin — открыть админ-панель
@@ -75,15 +75,17 @@ admin-btn-cancel = Отмена
 admin-btn-confirm = Подтвердить
 admin-btn-done = Готово
 admin-btn-undo = Отменить последнюю
+admin-btn-skip = Пропустить
 
 admin-create-code-prompt-code = Введите новый код (латиница, цифры, "-" или "_", до 32 символов):
 admin-create-code-invalid = Недопустимый формат кода. Используйте латиницу, цифры, "-" или "_", не длиннее 32 символов.
 admin-create-code-exists = Такой код уже существует. Введите другой.
 admin-create-code-prompt-link = Отправьте ссылку. Можно добавить несколько — после каждой это сообщение появится снова.
 admin-create-code-links-added = Добавлено ссылок: { $count }
-admin-create-code-prompt-description = Введите описание кода (или «-», чтобы пропустить):
+admin-create-code-prompt-description = Введите описание кода:
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Код «{ $code }» создан.
 
+admin-page-indicator = · { $page }/{ $total }
 admin-codes-title = [tg_emoji:5422519678624899490:package] <b>Коды</b> ({ $count })
 admin-codes-empty = Пока нет ни одного кода.
 admin-codes-item = { $code } — { $description } ({ $count } ссылок)
@@ -115,7 +117,7 @@ admin-user-revoke-done = Код «{ $code }» отобран у пользова
 admin-user-ban-btn = Забанить пользователя
 admin-user-unban-btn = Разбанить пользователя
 
-admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b>
+admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Добавить администратора
 admin-add-admin-prompt = Отправьте числовой Telegram ID нового администратора.

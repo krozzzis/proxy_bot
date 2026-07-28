@@ -1,18 +1,18 @@
-from collections.abc import Sequence
-
-from aiogram_dialog import Dialog
+from aiogram import Router
 
 from .admin import admin_menu_dialog, admins_dialog, broadcast_dialog, codes_dialog, create_code_dialog, users_dialog
-from .menu import user_menu_dialog
+from .user import enter_code_dialog, help_dialog, links_dialog, user_menu_dialog
 
-
-def get_dialogs() -> Sequence[Dialog]:
-    return (
-        user_menu_dialog(),
-        admin_menu_dialog(),
-        create_code_dialog(),
-        codes_dialog(),
-        users_dialog(),
-        admins_dialog(),
-        broadcast_dialog(),
-    )
+router = Router(name="dialogs")
+router.include_routers(
+    user_menu_dialog,
+    enter_code_dialog,
+    links_dialog,
+    help_dialog,
+    admin_menu_dialog,
+    create_code_dialog,
+    codes_dialog,
+    users_dialog,
+    admins_dialog,
+    broadcast_dialog,
+)

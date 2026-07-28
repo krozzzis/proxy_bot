@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
@@ -15,15 +16,19 @@ from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
-from ..states import AdminAdmins
 
 logger = logging.getLogger(__name__)
+
+
+class AdminAdmins(StatesGroup):
+    list = State()
+    enter_id = State()
 
 
 async def admins_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     admins = await storage.admins.all()
-    lines = [i18n.get("admin-admins-title")]
+    lines = [i18n.get("admin-admins-title", count=len(admins)), ""]
     for admin in admins:
         name = f"@{admin.username}" if admin.username else str(admin.user_id)
         lines.append(i18n.get("admin-admins-item", name=esc(name), id=str(admin.user_id)))
@@ -70,30 +75,29 @@ async def open_enter_id(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminAdmins.enter_id)
 
 
-def admins_dialog() -> Dialog:
-    return Dialog(
-        Window(
-            Format("{title}"),
-            Button(Format("{add_admin}"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
-            Cancel(Format("{back}"), style=icon("arrow_backward")),
-            state=AdminAdmins.list,
-            getter=admins_list_getter,
+admins_dialog = Dialog(
+    Window(
+        Format("{title}"),
+        Button(Format("{add_admin}"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
+        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        state=AdminAdmins.list,
+        getter=admins_list_getter,
+    ),
+    Window(
+        Format("{prompt}"),
+        TextInput(
+            id="admin_id_input",
+            type_factory=int,
+            on_success=on_id_entered,
+            on_error=on_id_error,
+            filter=not_a_command,
         ),
-        Window(
-            Format("{prompt}"),
-            TextInput(
-                id="admin_id_input",
-                type_factory=int,
-                on_success=on_id_entered,
-                on_error=on_id_error,
-                filter=not_a_command,
-            ),
-            #SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
-            SwitchTo(Format("{cancel}"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
+        #SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
+        SwitchTo(Format("{cancel}"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
 
-            #Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+        #Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
 
-            state=AdminAdmins.enter_id,
-            getter=enter_id_getter,
-        ),
-    )
+        state=AdminAdmins.enter_id,
+        getter=enter_id_getter,
+    ),
+)

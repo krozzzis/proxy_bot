@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
@@ -12,8 +13,13 @@ from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
-from ..common import icon
-from ..states import AdminUsers
+from ..common import icon, paginated_title
+
+
+class AdminUsers(StatesGroup):
+    list = State()
+    detail = State()
+
 
 # Ban/unban share one button slot whose icon+color follow the user's
 # current state - unbanning (banned=True) reads as the positive action.
@@ -55,7 +61,7 @@ async def users_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
         for u in chunk
     ]
     if users:
-        title = f"{i18n.get('admin-users-title', count=len(users))}  ({page + 1}/{total_pages})"
+        title = paginated_title(i18n, i18n.get("admin-users-title", count=len(users)), page, total_pages)
     else:
         title = i18n.get("admin-users-empty")
     return {
@@ -146,43 +152,42 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
     await callback.answer()
 
 
-def users_dialog() -> Dialog:
-    return Dialog(
-        Window(
-            Format("{title}"),
-            Column(
-                Select(
-                    Format("{item[label]}"),
-                    id="user_select",
-                    item_id_getter=lambda item: item["id"],
-                    items="users",
-                    on_click=on_user_selected,
-                    style=icon("bust_in_silhouette"),
-                ),
+users_dialog = Dialog(
+    Window(
+        Format("{title}"),
+        Column(
+            Select(
+                Format("{item[label]}"),
+                id="user_select",
+                item_id_getter=lambda item: item["id"],
+                items="users",
+                on_click=on_user_selected,
+                style=icon("bust_in_silhouette"),
             ),
-            Row(
-                Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
-                Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
-            ),
-            Cancel(Format("{back}"), style=icon("arrow_backward")),
-            state=AdminUsers.list,
-            getter=users_list_getter,
         ),
-        Window(
-            Format("{title}"),
-            Column(
-                Select(
-                    Format("{item[label]}"),
-                    id="revoke_select",
-                    item_id_getter=lambda item: item["id"],
-                    items="codes",
-                    on_click=on_revoke_code,
-                    style=icon("x", ButtonStyle.DANGER),
-                ),
-            ),
-            Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban, style=_BAN_TOGGLE_STYLE),
-            Button(Format("{back}"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
-            state=AdminUsers.detail,
-            getter=users_detail_getter,
+        Row(
+            Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
+            Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
         ),
-    )
+        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        state=AdminUsers.list,
+        getter=users_list_getter,
+    ),
+    Window(
+        Format("{title}"),
+        Column(
+            Select(
+                Format("{item[label]}"),
+                id="revoke_select",
+                item_id_getter=lambda item: item["id"],
+                items="codes",
+                on_click=on_revoke_code,
+                style=icon("x", ButtonStyle.DANGER),
+            ),
+        ),
+        Button(Format("{ban_btn}"), id="toggle_ban", on_click=on_toggle_ban, style=_BAN_TOGGLE_STYLE),
+        Button(Format("{back}"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
+        state=AdminUsers.detail,
+        getter=users_detail_getter,
+    ),
+)

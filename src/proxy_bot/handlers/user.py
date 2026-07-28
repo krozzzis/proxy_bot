@@ -5,9 +5,10 @@ import logging
 from aiogram import Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
-from aiogram_dialog import DialogManager, StartMode
+from aiogram_dialog import DialogManager, ShowMode, StartMode
 
-from proxy_bot.dialogs.states import AdminMenu, UserMenu
+from proxy_bot.dialogs.admin import AdminMenu
+from proxy_bot.dialogs.user import EnterCode, Help, Links, UserMenu
 from proxy_bot.filters import IsAdmin
 from proxy_bot.utils.audit import actor
 
@@ -19,7 +20,7 @@ router = Router(name="user")
 @router.message(CommandStart(deep_link=True))
 async def cmd_start_with_code(message: Message, dialog_manager: DialogManager, command: CommandObject) -> None:
     # Deep link: t.me/<bot>?start=<code> auto-activates <code>, same as typing
-    # it manually into "Ввести код" (see dialogs/menu.py: on_dialog_start).
+    # it manually into "Ввести код" (see dialogs/user/menu.py: on_dialog_start).
     await dialog_manager.start(
         UserMenu.main, mode=StartMode.RESET_STACK, data={"greet": True, "auto_code": command.args}
     )
@@ -32,17 +33,25 @@ async def cmd_start(message: Message, dialog_manager: DialogManager) -> None:
 
 @router.message(Command("code"))
 async def cmd_code(message: Message, dialog_manager: DialogManager) -> None:
-    await dialog_manager.start(UserMenu.enter_code, mode=StartMode.RESET_STACK)
+    # enter_code is a sub-dialog of the main menu now, not one of its states -
+    # start the menu underneath first so Cancel has somewhere to land. Its
+    # own render is suppressed (NO_UPDATE) since only the sub-dialog on top
+    # of it should actually produce a message - otherwise the menu flashes
+    # as a message of its own before enter_code's.
+    await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE)
+    await dialog_manager.start(EnterCode.main, show_mode=ShowMode.SEND)
 
 
 @router.message(Command("link"))
 async def cmd_link(message: Message, dialog_manager: DialogManager) -> None:
-    await dialog_manager.start(UserMenu.links, mode=StartMode.RESET_STACK)
+    await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE)
+    await dialog_manager.start(Links.main, show_mode=ShowMode.SEND)
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, dialog_manager: DialogManager) -> None:
-    await dialog_manager.start(UserMenu.help, mode=StartMode.RESET_STACK)
+    await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE)
+    await dialog_manager.start(Help.main, show_mode=ShowMode.SEND)
 
 
 @router.message(Command("admin"), IsAdmin())

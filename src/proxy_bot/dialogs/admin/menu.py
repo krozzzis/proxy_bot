@@ -1,17 +1,38 @@
 from __future__ import annotations
 
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Group
 from aiogram_dialog.widgets.text import Format
 
 from ..common import icon
-from ..states import AdminAdmins, AdminBroadcast, AdminCodes, AdminCreateCode, AdminMenu, AdminUsers, UserMenu
+from .admins import AdminAdmins
+from .broadcast import AdminBroadcast
+from .codes import AdminCodes
+from .create_code import AdminCreateCode
+from .users import AdminUsers
 
 
-async def admin_menu_getter(i18n, **kwargs) -> dict:
+class AdminMenu(StatesGroup):
+    main = State()
+
+
+async def on_child_result(_start_data: object, result: object, manager: DialogManager) -> None:
+    # create_code (and any future child that finishes with a confirmation)
+    # hands back {"banner": ...} - show it as part of this re-render
+    # instead of a message of its own, sent separately and out of order.
+    if isinstance(result, dict) and result.get("banner"):
+        manager.dialog_data["banner"] = result["banner"]
+
+
+async def admin_menu_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+    title = i18n.get("admin-menu-title")
+    banner = dialog_manager.dialog_data.pop("banner", None)
+    if banner:
+        title = f"{banner}\n\n{title}"
     return {
-        "title": i18n.get("admin-menu-title"),
+        "title": title,
         "btn_create_code": i18n.get("admin-btn-create-code"),
         "btn_codes": i18n.get("admin-btn-codes"),
         "btn_users": i18n.get("admin-btn-users"),
@@ -50,11 +71,16 @@ async def close_menu(_callback: CallbackQuery, _button: Button, manager: DialogM
     if len(manager.current_stack().intents) > 1:
         await manager.done()
     else:
+        # Imported here, not at module level: dialogs.user.menu imports
+        # AdminMenu from this module to open the admin panel, so a
+        # top-level import back would be circular.
+        from ..user.menu import UserMenu
+
         await manager.start(UserMenu.main, mode=StartMode.RESET_STACK)
 
 
-def admin_menu_window() -> Window:
-    return Window(
+admin_menu_dialog = Dialog(
+    Window(
         Format("{title}"),
         Group(
             Button(Format("{btn_create_code}"), id="create_code", on_click=open_create_code, style=icon("heavy_plus_sign")),
@@ -67,8 +93,6 @@ def admin_menu_window() -> Window:
         Button(Format("{btn_close}"), id="close", on_click=close_menu, style=icon("arrow_backward")),
         state=AdminMenu.main,
         getter=admin_menu_getter,
-    )
-
-
-def admin_menu_dialog() -> Dialog:
-    return Dialog(admin_menu_window())
+    ),
+    on_process_result=on_child_result,
+)

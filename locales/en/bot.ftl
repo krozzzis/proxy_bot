@@ -41,8 +41,8 @@ help-text =
     /help — show this message
     /link — get your links
     /code — enter another code
-help-admin-suffix =
 
+help-admin-suffix =
     <b>Admin commands</b>
 
     /admin — open the admin panel
@@ -75,15 +75,17 @@ admin-btn-cancel = Cancel
 admin-btn-confirm = Confirm
 admin-btn-done = Done
 admin-btn-undo = Undo last
+admin-btn-skip = Skip
 
 admin-create-code-prompt-code = Enter a new code (letters, digits, "-" or "_", up to 32 characters):
 admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_", no longer than 32 characters.
 admin-create-code-exists = This code already exists. Enter another one.
 admin-create-code-prompt-link = Send a link. You can add several — this message reappears after each one.
 admin-create-code-links-added = Links added: { $count }
-admin-create-code-prompt-description = Enter a description for the code (or "-" to skip):
+admin-create-code-prompt-description = Enter a description for the code:
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Code "{ $code }" created.
 
+admin-page-indicator = · { $page }/{ $total }
 admin-codes-title = [tg_emoji:5422519678624899490:package] <b>Codes</b> ({ $count })
 admin-codes-empty = There are no codes yet.
 admin-codes-item = { $code } — { $description } ({ $count } links)
@@ -115,7 +117,7 @@ admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = Ban user
 admin-user-unban-btn = Unban user
 
-admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Administrators</b>
+admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Administrators</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Add administrator
 admin-add-admin-prompt = Send the numeric Telegram ID of the new administrator.

@@ -14,7 +14,7 @@ from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent, Unknown
 
 from proxy_bot.commands import setup_bot_commands
 from proxy_bot.config import load_config
-from proxy_bot.dialogs import get_dialogs
+from proxy_bot.dialogs import router as dialogs_router
 from proxy_bot.fsm import build_fsm_storage
 from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
 from proxy_bot.heartbeat import run_heartbeat
@@ -67,8 +67,7 @@ async def run() -> None:
 
     for router in get_command_routers():
         dp.include_router(router)
-    for dialog in get_dialogs():
-        dp.include_router(dialog)
+    dp.include_router(dialogs_router)
     for router in get_fallback_routers():
         dp.include_router(router)
 

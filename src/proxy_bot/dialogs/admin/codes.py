@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
@@ -13,10 +14,16 @@ from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
-from ..common import icon, not_a_command
-from ..states import AdminCodes
+from ..common import icon, not_a_command, paginated_title
 
 logger = logging.getLogger(__name__)
+
+
+class AdminCodes(StatesGroup):
+    list = State()
+    detail = State()
+    enter_link = State()
+    edit_description = State()
 
 PAGE_SIZE = 8
 
@@ -44,7 +51,7 @@ async def codes_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
         for c in chunk
     ]
     if codes:
-        title = f"{i18n.get('admin-codes-title', count=len(codes))}  ({page + 1}/{total_pages})"
+        title = paginated_title(i18n, i18n.get("admin-codes-title", count=len(codes)), page, total_pages)
     else:
         title = i18n.get("admin-codes-empty")
     return {
@@ -185,59 +192,58 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminCodes.list)
 
 
-def codes_dialog() -> Dialog:
-    return Dialog(
-        Window(
-            Format("{title}"),
-            Column(
-                Select(
-                    Format("{item[label]}"),
-                    id="code_select",
-                    item_id_getter=lambda item: item["id"],
-                    items="codes",
-                    on_click=on_code_selected,
-                    style=icon("package"),
-                ),
+codes_dialog = Dialog(
+    Window(
+        Format("{title}"),
+        Column(
+            Select(
+                Format("{item[label]}"),
+                id="code_select",
+                item_id_getter=lambda item: item["id"],
+                items="codes",
+                on_click=on_code_selected,
+                style=icon("package"),
             ),
-            Row(
-                Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
-                Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
+        ),
+        Row(
+            Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
+            Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
+        ),
+        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        state=AdminCodes.list,
+        getter=codes_list_getter,
+    ),
+    Window(
+        Format("{title}"),
+        Column(
+            Select(
+                Format("{item[label]}"),
+                id="remove_link_select",
+                item_id_getter=lambda item: item["id"],
+                items="link_items",
+                on_click=on_remove_link,
+                style=icon("x", ButtonStyle.DANGER),
             ),
-            Cancel(Format("{back}"), style=icon("arrow_backward")),
-            state=AdminCodes.list,
-            getter=codes_list_getter,
         ),
-        Window(
-            Format("{title}"),
-            Column(
-                Select(
-                    Format("{item[label]}"),
-                    id="remove_link_select",
-                    item_id_getter=lambda item: item["id"],
-                    items="link_items",
-                    on_click=on_remove_link,
-                    style=icon("x", ButtonStyle.DANGER),
-                ),
-            ),
-            Button(Format("{add_link}"), id="add_link", on_click=open_add_link, style=icon("heavy_plus_sign")),
-            Button(Format("{edit_description}"), id="edit_description", on_click=open_edit_description, style=icon("pencil2")),
-            Button(Format("{delete_code}"), id="delete_code", on_click=on_delete_code, style=icon("wastebasket", ButtonStyle.DANGER)),
-            SwitchTo(Format("{back}"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
-            state=AdminCodes.detail,
-            getter=codes_detail_getter,
-        ),
-        Window(
-            Format("{prompt}"),
-            TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
-            state=AdminCodes.enter_link,
-            getter=enter_link_getter,
-        ),
-        Window(
-            Format("{prompt}"),
-            TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
-            state=AdminCodes.edit_description,
-            getter=edit_description_getter,
-        ),
-    )
+        Button(Format("{add_link}"), id="add_link", on_click=open_add_link, style=icon("heavy_plus_sign")),
+        Button(Format("{edit_description}"), id="edit_description", on_click=open_edit_description, style=icon("pencil2")),
+        Button(Format("{delete_code}"), id="delete_code", on_click=on_delete_code, style=icon("wastebasket", ButtonStyle.DANGER)),
+        SwitchTo(Format("{back}"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
+        state=AdminCodes.detail,
+        getter=codes_detail_getter,
+    ),
+    Window(
+        Format("{prompt}"),
+        TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
+        SwitchTo(Format("{back}"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
+        state=AdminCodes.enter_link,
+        getter=enter_link_getter,
+    ),
+    Window(
+        Format("{prompt}"),
+        TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
+        SwitchTo(Format("{back}"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
+        state=AdminCodes.edit_description,
+        getter=edit_description_getter,
+    ),
+)

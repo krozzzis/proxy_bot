@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
@@ -16,7 +17,13 @@ from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
-from ..states import AdminBroadcast
+
+
+class AdminBroadcast(StatesGroup):
+    choose_target = State()
+    choose_code = State()
+    enter_text = State()
+    confirm = State()
 
 logger = logging.getLogger(__name__)
 
@@ -118,42 +125,41 @@ async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: Dia
     await manager.done()
 
 
-def broadcast_dialog() -> Dialog:
-    return Dialog(
-        Window(
-            Format("{prompt}"),
-            Button(Format("{target_all}"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
-            Button(Format("{target_code}"), id="target_code", on_click=choose_by_code, style=icon("package")),
-            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
-            state=AdminBroadcast.choose_target,
-            getter=choose_target_getter,
+broadcast_dialog = Dialog(
+    Window(
+        Format("{prompt}"),
+        Button(Format("{target_all}"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
+        Button(Format("{target_code}"), id="target_code", on_click=choose_by_code, style=icon("package")),
+        Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+        state=AdminBroadcast.choose_target,
+        getter=choose_target_getter,
+    ),
+    Window(
+        Format("{title}"),
+        Select(
+            Format("{item[label]}"),
+            id="code_select",
+            item_id_getter=lambda item: item["id"],
+            items="codes",
+            on_click=on_code_chosen,
+            style=icon("package"),
         ),
-        Window(
-            Format("{title}"),
-            Select(
-                Format("{item[label]}"),
-                id="code_select",
-                item_id_getter=lambda item: item["id"],
-                items="codes",
-                on_click=on_code_chosen,
-                style=icon("package"),
-            ),
-            SwitchTo(Format("{back}"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
-            state=AdminBroadcast.choose_code,
-            getter=choose_code_getter,
-        ),
-        Window(
-            Format("{prompt}"),
-            TextInput(id="broadcast_text", on_success=on_text_entered, filter=not_a_command),
-            SwitchTo(Format("{back}"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
-            state=AdminBroadcast.enter_text,
-            getter=enter_text_getter,
-        ),
-        Window(
-            Format("{confirm_text}"),
-            Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-            Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
-            state=AdminBroadcast.confirm,
-            getter=confirm_getter,
-        ),
-    )
+        SwitchTo(Format("{back}"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
+        state=AdminBroadcast.choose_code,
+        getter=choose_code_getter,
+    ),
+    Window(
+        Format("{prompt}"),
+        TextInput(id="broadcast_text", on_success=on_text_entered, filter=not_a_command),
+        SwitchTo(Format("{back}"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
+        state=AdminBroadcast.enter_text,
+        getter=enter_text_getter,
+    ),
+    Window(
+        Format("{confirm_text}"),
+        Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+        Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+        state=AdminBroadcast.confirm,
+        getter=confirm_getter,
+    ),
+)
