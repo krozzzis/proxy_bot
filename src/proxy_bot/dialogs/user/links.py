@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, List, Multi
 
 from proxy_bot.storage import Storage
@@ -91,7 +92,7 @@ links_dialog = Dialog(
             I18N("menu-btn-enter-code"),
             id="open_enter_code_from_links",
             on_click=open_enter_code,
-            style=icon("heavy_plus_sign"),
+            style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
         ),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Links.main,
