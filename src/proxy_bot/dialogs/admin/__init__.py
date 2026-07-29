@@ -1,3 +1,4 @@
+from .add_user import add_user_dialog
 from .admins import admins_dialog
 from .broadcast import broadcast_dialog
 from .codes import codes_dialog
@@ -7,6 +8,7 @@ from .users import users_dialog
 
 __all__ = [
     "AdminMenu",
+    "add_user_dialog",
     "admin_menu_dialog",
     "admins_dialog",
     "broadcast_dialog",

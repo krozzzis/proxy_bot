@@ -16,6 +16,7 @@ from proxy_bot.utils.html import esc
 from ..common import icon
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
+from .add_user import AdminAddUser
 
 
 async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
@@ -83,6 +84,13 @@ async def on_user_selected(_callback: CallbackQuery, _select, manager: DialogMan
         return
     manager.dialog_data["selected_user_id"] = selected_user_id
     await manager.switch_to(AdminUsers.detail)
+
+
+async def open_add_user(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    await manager.start(AdminAddUser.enter_identifier)
 
 
 async def on_prev_page(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -193,6 +201,7 @@ users_dialog = Dialog(
             Button(I18N("admin-btn-prev"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
             Button(I18N("admin-btn-next"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
         ),
+        Button(I18N("admin-btn-add-user"), id="add_user", on_click=open_add_user, style=icon("heavy_plus_sign")),
         Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminUsers.list,
         getter=users_list_getter,

@@ -125,12 +125,25 @@ admin-user-ban-admin-denied = Нельзя забанить администра
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Добавить администратора
+admin-add-admin-choose-method-prompt = Как указать нового администратора?
+admin-add-admin-method-id = По ID
+admin-add-admin-method-username = По username
 admin-add-admin-prompt = Отправьте числовой Telegram ID нового администратора.
 admin-add-admin-invalid = Некорректный ID. Отправьте число — Telegram ID пользователя.
+admin-add-admin-prompt-username = Отправьте username пользователя (с @ или без). Пользователь должен хотя бы раз запустить бота.
+admin-add-admin-username-invalid = Пользователь с таким username не найден. Возможно, он ещё не запускал бота — используйте числовой ID.
 admin-add-admin-already = Этот пользователь уже администратор.
 admin-add-admin-done = [tg_emoji:5425143379656744388:white_check_mark] Пользователь { $id } назначен администратором.
 admin-remove-admin-btn = Снять права — { $name }
 admin-remove-admin-done = Права администратора сняты с пользователя { $id }.
+
+admin-btn-add-user = Добавить пользователя
+admin-add-user-prompt = Отправьте Telegram ID или username пользователя (с @ или без).
+admin-add-user-invalid = Пользователь не найден. Если он ещё не запускал бота, укажите его числовой ID.
+admin-add-user-subs-title = Выберите, какие подписки подключить пользователю { $name } (id { $id }):
+admin-add-user-subs-empty = Пока нет ни одного кода. Сначала создайте код в разделе «Все коды».
+admin-add-user-sub-item = { $code } — { $description }
+admin-add-user-done = [tg_emoji:5425143379656744388:white_check_mark] Пользователь { $id } добавлен. Подключено подписок: { $count }.
 
 admin-broadcast-target-prompt = [tg_emoji:5422893770276381417:loudspeaker] Кому отправить сообщение?
 admin-broadcast-target-all = Всем пользователям

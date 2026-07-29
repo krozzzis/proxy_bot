@@ -29,7 +29,18 @@ async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
 
 class AdminAdmins(StatesGroup):
     list = State()
+    choose_method = State()
     enter_id = State()
+    enter_username = State()
+
+
+def _is_super_admin(manager: DialogManager) -> bool:
+    """Only the root admin (config's ROOT_ADMIN_ID) may grant admin rights -
+    an ordinary admin could otherwise mint an arbitrary number of peers with
+    equal standing, including themselves after a demotion."""
+    storage: Storage = manager.middleware_data["storage"]
+    admin = manager.middleware_data["event_from_user"]
+    return admin.id == storage.admins.root_admin_id
 
 
 async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
@@ -44,31 +55,35 @@ async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     # for that row would be a dead click. Leave it out instead of rendering
     # a button that can never do anything.
     removable = [item for item, admin in zip(items, admins) if admin.user_id != storage.admins.root_admin_id]
-    return {"count": len(admins), "admins": items, "removable_admins": removable}
+    return {
+        "count": len(admins),
+        "admins": items,
+        "removable_admins": removable,
+        "is_super_admin": _is_super_admin(dialog_manager),
+    }
 
 
 async def enter_id_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     return {"id_error": dialog_manager.dialog_data.get("id_error", False)}
 
 
+async def enter_username_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    return {"username_error": dialog_manager.dialog_data.get("username_error", False)}
+
+
 async def on_id_error(message: Message, widget: ManagedTextInput, manager: DialogManager, error: ValueError) -> None:
     manager.dialog_data["id_error"] = True
 
 
-async def on_id_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, user_id: int) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-
+async def _grant_admin(message: Message, user_id: int, manager: DialogManager) -> None:
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
 
-    manager.dialog_data["id_error"] = False
     target_user = await storage.users.get(user_id)
     target = actor_id(user_id, target_user.username if target_user else None)
 
-    added = await storage.admins.add(user_id, username=None, added_by=admin.id)
+    added = await storage.admins.add(user_id, username=target_user.username if target_user else None, added_by=admin.id)
     if not added:
         logger.info("%s tried to grant admin rights to %s, who already is one", actor(admin), target)
         await message.answer(i18n.get("admin-add-admin-already"))
@@ -79,9 +94,57 @@ async def on_id_entered(message: Message, widget: ManagedTextInput, manager: Dia
     await manager.switch_to(AdminAdmins.list)
 
 
+async def on_id_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, user_id: int) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    if not _is_super_admin(manager):
+        await manager.switch_to(AdminAdmins.list)
+        return
+
+    manager.dialog_data["id_error"] = False
+    await _grant_admin(message, user_id, manager)
+
+
+async def on_username_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, raw: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    if not _is_super_admin(manager):
+        await manager.switch_to(AdminAdmins.list)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    username = raw.strip().lstrip("@").lower()
+    target_user = next(
+        (u for u in await storage.users.all() if u.username and u.username.lower() == username),
+        None,
+    )
+    if target_user is None:
+        manager.dialog_data["username_error"] = True
+        return
+
+    manager.dialog_data["username_error"] = False
+    await _grant_admin(message, target_user.user_id, manager)
+
+
+async def open_choose_method(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    if not _is_super_admin(manager):
+        return
+    await manager.switch_to(AdminAdmins.choose_method)
+
+
 async def open_enter_id(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     manager.dialog_data["id_error"] = False
     await manager.switch_to(AdminAdmins.enter_id)
+
+
+async def open_enter_username(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["username_error"] = False
+    await manager.switch_to(AdminAdmins.enter_username)
 
 
 async def on_admin_removed(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
@@ -124,10 +187,28 @@ admins_dialog = Dialog(
                 style=icon("x", ButtonStyle.DANGER),
             ),
         ),
-        Button(I18N("admin-btn-add-admin"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
+        Button(
+            I18N("admin-btn-add-admin"),
+            id="add_admin",
+            on_click=open_choose_method,
+            when="is_super_admin",
+            style=icon("heavy_plus_sign"),
+        ),
         Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminAdmins.list,
         getter=admins_list_getter,
+    ),
+    Window(
+        I18N("admin-add-admin-choose-method-prompt"),
+        Button(I18N("admin-add-admin-method-id"), id="method_id", on_click=open_enter_id, style=icon("pencil2")),
+        Button(
+            I18N("admin-add-admin-method-username"),
+            id="method_username",
+            on_click=open_enter_username,
+            style=icon("bust_in_silhouette"),
+        ),
+        SwitchTo(I18N("admin-btn-cancel"), id="back_to_list_from_method", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
+        state=AdminAdmins.choose_method,
     ),
     Window(
         Multi(I18N("admin-add-admin-invalid", when="id_error"), I18N("admin-add-admin-prompt"), sep="\n\n"),
@@ -138,9 +219,27 @@ admins_dialog = Dialog(
             on_error=on_id_error,
             filter=not_a_command,
         ),
-        SwitchTo(I18N("admin-btn-cancel"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
+        SwitchTo(
+            I18N("admin-btn-cancel"), id="back_to_method_from_id", state=AdminAdmins.choose_method, style=icon("x", ButtonStyle.DANGER)
+        ),
         state=AdminAdmins.enter_id,
         getter=enter_id_getter,
+    ),
+    Window(
+        Multi(I18N("admin-add-admin-username-invalid", when="username_error"), I18N("admin-add-admin-prompt-username"), sep="\n\n"),
+        TextInput(
+            id="admin_username_input",
+            on_success=on_username_entered,
+            filter=not_a_command,
+        ),
+        SwitchTo(
+            I18N("admin-btn-cancel"),
+            id="back_to_method_from_username",
+            state=AdminAdmins.choose_method,
+            style=icon("x", ButtonStyle.DANGER),
+        ),
+        state=AdminAdmins.enter_username,
+        getter=enter_username_getter,
     ),
     on_start=on_dialog_start,
 )

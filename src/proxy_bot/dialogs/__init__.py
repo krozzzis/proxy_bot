@@ -1,6 +1,14 @@
 from aiogram import Router
 
-from .admin import admin_menu_dialog, admins_dialog, broadcast_dialog, codes_dialog, create_code_dialog, users_dialog
+from .admin import (
+    add_user_dialog,
+    admin_menu_dialog,
+    admins_dialog,
+    broadcast_dialog,
+    codes_dialog,
+    create_code_dialog,
+    users_dialog,
+)
 from .user import enter_code_dialog, help_dialog, links_dialog, user_menu_dialog
 
 router = Router(name="dialogs")
@@ -15,4 +23,5 @@ router.include_routers(
     users_dialog,
     admins_dialog,
     broadcast_dialog,
+    add_user_dialog,
 )

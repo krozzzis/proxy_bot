@@ -125,12 +125,25 @@ admin-user-ban-admin-denied = Can't ban an administrator. Revoke their admin rig
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Administrators</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Add administrator
+admin-add-admin-choose-method-prompt = How should the new administrator be specified?
+admin-add-admin-method-id = By ID
+admin-add-admin-method-username = By username
 admin-add-admin-prompt = Send the numeric Telegram ID of the new administrator.
 admin-add-admin-invalid = Invalid ID. Send a number — the user's Telegram ID.
+admin-add-admin-prompt-username = Send the user's username (with or without @). The user must have started the bot at least once.
+admin-add-admin-username-invalid = No user with that username was found. They may not have started the bot yet — use their numeric ID instead.
 admin-add-admin-already = This user is already an administrator.
 admin-add-admin-done = [tg_emoji:5425143379656744388:white_check_mark] User { $id } is now an administrator.
 admin-remove-admin-btn = Revoke rights — { $name }
 admin-remove-admin-done = Administrator rights revoked from user { $id }.
+
+admin-btn-add-user = Add user
+admin-add-user-prompt = Send the user's Telegram ID or username (with or without @).
+admin-add-user-invalid = User not found. If they haven't started the bot yet, use their numeric ID instead.
+admin-add-user-subs-title = Choose which subscriptions to enable for { $name } (id { $id }):
+admin-add-user-subs-empty = There are no codes yet. Create one first, in the Codes section.
+admin-add-user-sub-item = { $code } — { $description }
+admin-add-user-done = [tg_emoji:5425143379656744388:white_check_mark] User { $id } added. Subscriptions enabled: { $count }.
 
 admin-broadcast-target-prompt = [tg_emoji:5422893770276381417:loudspeaker] Who should receive the message?
 admin-broadcast-target-all = All users
