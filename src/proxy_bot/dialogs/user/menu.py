@@ -134,7 +134,7 @@ user_menu_dialog = Dialog(
             id="primary_enter_code",
             on_click=open_enter_code,
             when="no_codes",
-            style=icon("heavy_plus_sign"),
+            style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
         ),
         Group(
             Button(
@@ -142,7 +142,7 @@ user_menu_dialog = Dialog(
                 id="open_enter_code",
                 on_click=open_enter_code,
                 when="has_codes",
-                style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
+                style=icon("heavy_plus_sign"),
             ),
             Button(I18N("menu-btn-links"), id="open_links", on_click=open_links, when="no_codes", style=icon("key")),
             Button(I18N("menu-btn-help"), id="open_help", on_click=open_help, style=icon("question")),
