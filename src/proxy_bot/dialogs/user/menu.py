@@ -4,6 +4,7 @@ import logging
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.kbd import Button, Group
 from aiogram_dialog.widgets.text import Case
 
@@ -127,7 +128,7 @@ user_menu_dialog = Dialog(
         # code" while they don't - mirroring how Liberty VPN swaps its
         # single main-menu button between "Test" and "Manage
         # subscription" depending on account state.
-        Button(I18N("menu-btn-links"), id="primary_links", on_click=open_links, when="has_codes", style=icon("key")),
+        Button(I18N("menu-btn-links"), id="primary_links", on_click=open_links, when="has_codes", style=icon("key", ButtonStyle.PRIMARY)),
         Button(
             I18N("menu-btn-enter-code"),
             id="primary_enter_code",
@@ -141,7 +142,7 @@ user_menu_dialog = Dialog(
                 id="open_enter_code",
                 on_click=open_enter_code,
                 when="has_codes",
-                style=icon("heavy_plus_sign"),
+                style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
             ),
             Button(I18N("menu-btn-links"), id="open_links", on_click=open_links, when="no_codes", style=icon("key")),
             Button(I18N("menu-btn-help"), id="open_help", on_click=open_help, style=icon("question")),
