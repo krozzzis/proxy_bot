@@ -6,16 +6,18 @@ menu-title-greeting =
     { "" }[tg_emoji:5422610611672490482:wave] Здравствуйте, { $name }!
 
     { "" }[tg_emoji:5425029979635229746:clipboard] <b>Личный кабинет</b>
-    Активных кодов: { $count }
+
+    Активных подписок: { $count }
 
     Выберите действие:
 menu-title =
     { "" }[tg_emoji:5425029979635229746:clipboard] <b>Личный кабинет</b>
-    Активных кодов: { $count }
+
+    Активных подписок: { $count }
 
     Выберите действие:
 menu-btn-enter-code = Ввести код
-menu-btn-links = Мои ссылки
+menu-btn-links = Мои подписки
 menu-btn-help = Помощь
 menu-btn-back = Назад
 menu-btn-admin = Админ-панель
@@ -26,20 +28,20 @@ code-already-added = [tg_emoji:5425143379656744388:white_check_mark] Этот к
 code-accepted = [tg_emoji:5425143379656744388:white_check_mark] <b>Код принят!</b>
 code-prompt-again = Введите новый код доступа.
 
-link-header = [tg_emoji:5422546651019517877:key] <b>Ваши ссылки</b>
+link-header = [tg_emoji:5422546651019517877:key] <b>Ваши подписки</b>
 link-item =
     { "" }[tg_emoji:5424853319040412766:small_blue_diamond] <b>{ $description }</b>
     Код: <code>{ $code }</code>
 
     { $links }
-link-none = У вас пока нет ни одной ссылки. Нажмите «Ввести код», чтобы получить доступ.
+link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
 
 help-text =
     <b>Доступные команды</b>
 
     /start — начать работу с ботом
     /help — показать это сообщение
-    /link — получить свои ссылки
+    /link — получить свои подписки
     /code — ввести ещё один код
 
 help-admin-suffix =
@@ -82,7 +84,7 @@ admin-create-code-invalid = Недопустимый формат кода. Ис
 admin-create-code-exists = Такой код уже существует. Введите другой.
 admin-create-code-prompt-link = Отправьте ссылку. Можно добавить несколько — после каждой это сообщение появится снова.
 admin-create-code-links-added = Добавлено ссылок: { $count }
-admin-create-code-prompt-description = Введите описание кода:
+admin-create-code-prompt-description = Введите описание подписки:
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Код «{ $code }» создан.
 
 admin-page-indicator = · { $page }/{ $total }
@@ -90,8 +92,9 @@ admin-codes-title = [tg_emoji:5422519678624899490:package] <b>Коды</b> ({ $c
 admin-codes-empty = Пока нет ни одного кода.
 admin-codes-item = { $code } — { $description } ({ $count } ссылок)
 admin-code-detail-title =
-    { "" }[tg_emoji:5422519678624899490:package] Код: <b>{ $code }</b>
-    Описание: { $description }
+    { "" }[tg_emoji:5422519678624899490:package] <b>{ $code }</b>
+
+    Подписка: { $description }
 admin-code-no-links = Ссылок пока нет.
 admin-code-remove-link-btn = Удалить ссылку #{ $n }
 admin-code-link-removed = Ссылка удалена.
@@ -109,6 +112,7 @@ admin-users-empty = Пока нет ни одного пользователя.
 admin-users-item = { $name } (id { $id }) — кодов: { $count }
 admin-user-detail-title =
     { "" }[tg_emoji:5424728356966933997:bust_in_silhouette] <b>{ $name }</b>
+
     ID: <code>{ $id }</code>
     Забанен: { $banned }
 admin-user-codes-none = У пользователя нет активированных кодов.

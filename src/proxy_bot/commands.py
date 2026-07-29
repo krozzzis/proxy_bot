@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 USER_COMMANDS = [
     BotCommand(command="start", description="Начать работу с ботом"),
     BotCommand(command="help", description="Список доступных команд"),
-    BotCommand(command="link", description="Получить свои ссылки"),
+    BotCommand(command="link", description="Получить свои подписки"),
     BotCommand(command="code", description="Ввести ещё один код"),
 ]
 

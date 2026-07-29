@@ -6,16 +6,18 @@ menu-title-greeting =
     { "" }[tg_emoji:5422610611672490482:wave] Hello, { $name }!
 
     { "" }[tg_emoji:5425029979635229746:clipboard] <b>Personal cabinet</b>
-    Active codes: { $count }
+
+    Active subscriptions: { $count }
 
     Choose an action:
 menu-title =
     { "" }[tg_emoji:5425029979635229746:clipboard] <b>Personal cabinet</b>
-    Active codes: { $count }
+
+    Active subscriptions: { $count }
 
     Choose an action:
 menu-btn-enter-code = Enter code
-menu-btn-links = My links
+menu-btn-links = My subscriptions
 menu-btn-help = Help
 menu-btn-back = Back
 menu-btn-admin = Admin panel
@@ -26,20 +28,20 @@ code-already-added = [tg_emoji:5425143379656744388:white_check_mark] This code i
 code-accepted = [tg_emoji:5425143379656744388:white_check_mark] <b>Code accepted!</b>
 code-prompt-again = Enter another access code.
 
-link-header = [tg_emoji:5422546651019517877:key] <b>Your links</b>
+link-header = [tg_emoji:5422546651019517877:key] <b>Your subscriptions</b>
 link-item =
     { "" }[tg_emoji:5424853319040412766:small_blue_diamond] <b>{ $description }</b>
     Code: <code>{ $code }</code>
 
     { $links }
-link-none = You don't have any links yet. Tap "Enter code" to get access.
+link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 
 help-text =
     <b>Available commands</b>
 
     /start — start using the bot
     /help — show this message
-    /link — get your links
+    /link — get your subscriptions
     /code — enter another code
 
 help-admin-suffix =
@@ -82,7 +84,7 @@ admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_"
 admin-create-code-exists = This code already exists. Enter another one.
 admin-create-code-prompt-link = Send a link. You can add several — this message reappears after each one.
 admin-create-code-links-added = Links added: { $count }
-admin-create-code-prompt-description = Enter a description for the code:
+admin-create-code-prompt-description = Enter a description for the subscription:
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Code "{ $code }" created.
 
 admin-page-indicator = · { $page }/{ $total }
@@ -90,8 +92,9 @@ admin-codes-title = [tg_emoji:5422519678624899490:package] <b>Codes</b> ({ $coun
 admin-codes-empty = There are no codes yet.
 admin-codes-item = { $code } — { $description } ({ $count } links)
 admin-code-detail-title =
-    { "" }[tg_emoji:5422519678624899490:package] Code: <b>{ $code }</b>
-    Description: { $description }
+    { "" }[tg_emoji:5422519678624899490:package] <b>{ $code }</b>
+
+    Subscription: { $description }
 admin-code-no-links = No links yet.
 admin-code-remove-link-btn = Remove link #{ $n }
 admin-code-link-removed = Link removed.
@@ -109,6 +112,7 @@ admin-users-empty = There are no users yet.
 admin-users-item = { $name } (id { $id }) — codes: { $count }
 admin-user-detail-title =
     { "" }[tg_emoji:5424728356966933997:bust_in_silhouette] <b>{ $name }</b>
+
     ID: <code>{ $id }</code>
     Banned: { $banned }
 admin-user-codes-none = This user has no activated codes.
