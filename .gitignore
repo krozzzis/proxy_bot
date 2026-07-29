@@ -18,3 +18,5 @@ logs/
 
 # Nix
 .direnv/
+
+docs/

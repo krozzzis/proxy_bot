@@ -19,6 +19,7 @@ from proxy_bot.utils.html import esc
 from ..common import icon, not_a_command
 from ..forms import FormField, build_field_window
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,11 @@ _CANCEL_STYLE = icon("x", ButtonStyle.DANGER)
 
 # Codes end up as Select callback_data (Telegram caps callback_data at 64
 # bytes total, and aiogram-dialog adds its own widget/intent-id prefix on
-# top), so keep codes well short of that ceiling.
-_CODE_ADAPTER = TypeAdapter(Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{3,32}$")])
+# top), so keep codes well short of that ceiling. The lower bound guards
+# against online brute-forcing through enter_code.on_code_entered, which
+# has no attempt limit of its own - 8 chars from this alphabet is ~2.8e14
+# combinations, vs. ~2.6e5 for the old 3-char floor.
+_CODE_ADAPTER = TypeAdapter(Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{8,32}$")])
 _DESCRIPTION_ADAPTER = TypeAdapter(str)
 
 
@@ -96,7 +100,16 @@ async def on_links_done(_callback: CallbackQuery, _button: Button, manager: Dial
         await manager.next()
 
 
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+
+
 async def on_description_done(description: str, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     user = manager.middleware_data["event_from_user"]
 
@@ -135,4 +148,5 @@ create_code_dialog = Dialog(
     build_field_window(
         DESCRIPTION_FIELD, AdminCreateCode.enter_description, on_description_done, "admin-btn-cancel", _CANCEL_STYLE
     ),
+    on_start=on_dialog_start,
 )

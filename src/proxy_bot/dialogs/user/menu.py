@@ -8,6 +8,7 @@ from aiogram_dialog.widgets.kbd import Button, Group
 from aiogram_dialog.widgets.text import Case
 
 from proxy_bot.storage import Storage
+from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
 from ..common import icon
@@ -66,7 +67,21 @@ async def open_help(_callback, _button: Button, manager: DialogManager) -> None:
     await manager.start(Help.main)
 
 
-async def open_admin_panel(_callback, _button: Button, manager: DialogManager) -> None:
+async def open_admin_panel(callback, _button: Button, manager: DialogManager) -> None:
+    # The button itself is only rendered when is_admin (see
+    # main_menu_getter below), but that's a display condition, not an
+    # access check - aiogram_dialog still matches and processes a click on
+    # this widget id if one arrives some other way (e.g. an admin demoted
+    # while this exact menu message, with a still-live "open_admin" button,
+    # sits open in their chat). Re-check here rather than trusting that the
+    # button was legitimately shown to whoever clicked it.
+    storage: Storage = manager.middleware_data["storage"]
+    user = manager.middleware_data["event_from_user"]
+    if not await storage.admins.is_admin(user.id):
+        logger.warning("%s tried to open the admin panel via a stale button", actor(user))
+        await callback.answer(manager.middleware_data["i18n"].get("admin-only"), show_alert=True)
+        return
+
     # Imported here, not at module level: dialogs.admin.menu imports
     # UserMenu from this module to return to the user menu, so a
     # top-level import back would be circular.

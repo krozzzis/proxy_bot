@@ -16,8 +16,14 @@ from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
 
 logger = logging.getLogger(__name__)
+
+
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
 
 
 class AdminCodes(StatesGroup):
@@ -93,6 +99,10 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
 
 
 async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -101,7 +111,14 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
     code = await storage.codes.get(code_id)
     if code is None:
         return
-    index = int(item_id)
+    # item_id is a Select item id echoed back verbatim from callback_data,
+    # not re-validated against the currently rendered link_items by
+    # aiogram_dialog - guard the cast rather than assume it's still one of
+    # the positions this window last rendered.
+    try:
+        index = int(item_id)
+    except ValueError:
+        return
     if not (0 <= index < len(code.links)):
         return
     link = code.links[index]
@@ -115,6 +132,10 @@ async def open_add_link(_callback: CallbackQuery, _button: Button, manager: Dial
 
 
 async def on_link_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, link_text: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -135,6 +156,10 @@ async def open_edit_description(_callback: CallbackQuery, _button: Button, manag
 async def on_description_entered(
     message: Message, widget: ManagedTextInput, manager: DialogManager, description_text: str
 ) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -150,6 +175,10 @@ async def on_description_entered(
 
 
 async def on_delete_code(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -247,4 +276,5 @@ codes_dialog = Dialog(
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.edit_description,
     ),
+    on_start=on_dialog_start,
 )

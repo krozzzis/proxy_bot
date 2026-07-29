@@ -77,8 +77,8 @@ admin-btn-done = Done
 admin-btn-undo = Undo last
 admin-btn-skip = Skip
 
-admin-create-code-prompt-code = Enter a new code (letters, digits, "-" or "_", up to 32 characters):
-admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_", no longer than 32 characters.
+admin-create-code-prompt-code = Enter a new code (letters, digits, "-" or "_", 8 to 32 characters):
+admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_", 8 to 32 characters long.
 admin-create-code-exists = This code already exists. Enter another one.
 admin-create-code-prompt-link = Send a link. You can add several — this message reappears after each one.
 admin-create-code-links-added = Links added: { $count }

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, DialogManager, StartMode, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Group
 from aiogram_dialog.widgets.text import Multi
 
 from ..common import icon
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
 from .admins import AdminAdmins
 from .broadcast import AdminBroadcast
 from .codes import AdminCodes
@@ -17,6 +18,11 @@ from .users import AdminUsers
 
 class AdminMenu(StatesGroup):
     main = State()
+
+
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
 
 
 async def on_child_result(_start_data: object, result: object, manager: DialogManager) -> None:
@@ -36,40 +42,47 @@ async def admin_menu_getter(dialog_manager: DialogManager, **kwargs) -> dict:
 
 
 async def open_create_code(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    # Without this, a demoted admin clicking any button here would just
+    # bounce forever: the child dialog's own on_start guard would reject
+    # them and pop straight back to this same still-open, still-unchecked
+    # menu (see AdminMenu.on_dialog_start - it only runs once, when this
+    # menu itself was started, not on every re-render).
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.start(AdminCreateCode.enter_code)
 
 
 async def open_codes(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.start(AdminCodes.list)
 
 
 async def open_users(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.start(AdminUsers.list)
 
 
 async def open_admins(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.start(AdminAdmins.list)
 
 
 async def open_broadcast(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.start(AdminBroadcast.choose_target)
 
 
 async def close_menu(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    # Opened from the merged user menu, the admin panel sits on top of a
-    # UserMenu.main dialog on the stack, so done() pops back to it. Opened
-    # directly via /admin, the admin panel is the only thing on the stack
-    # (a single-message entry point), so there's nothing beneath it to pop
-    # back to - start the user menu explicitly in that case instead.
-    if len(manager.current_stack().intents) > 1:
-        await manager.done()
-    else:
-        # Imported here, not at module level: dialogs.user.menu imports
-        # AdminMenu from this module to open the admin panel, so a
-        # top-level import back would be circular.
-        from ..user.menu import UserMenu
-
-        await manager.start(UserMenu.main, mode=StartMode.RESET_STACK)
+    await leave_admin_area(manager)
 
 
 admin_menu_dialog = Dialog(
@@ -87,5 +100,6 @@ admin_menu_dialog = Dialog(
         state=AdminMenu.main,
         getter=admin_menu_getter,
     ),
+    on_start=on_dialog_start,
     on_process_result=on_child_result,
 )

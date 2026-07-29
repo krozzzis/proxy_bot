@@ -17,8 +17,14 @@ from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
 
 logger = logging.getLogger(__name__)
+
+
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
 
 
 class AdminAdmins(StatesGroup):
@@ -45,6 +51,10 @@ async def on_id_error(message: Message, widget: ManagedTextInput, manager: Dialo
 
 
 async def on_id_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, user_id: int) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -94,4 +104,5 @@ admins_dialog = Dialog(
         state=AdminAdmins.enter_id,
         getter=enter_id_getter,
     ),
+    on_start=on_dialog_start,
 )

@@ -18,6 +18,7 @@ from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
 
 
 class AdminBroadcast(StatesGroup):
@@ -29,6 +30,11 @@ class AdminBroadcast(StatesGroup):
 logger = logging.getLogger(__name__)
 
 THROTTLE_SECONDS = 0.05
+
+
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
 
 
 async def choose_all(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -74,6 +80,10 @@ async def confirm_getter(dialog_manager: DialogManager, **kwargs) -> dict:
 
 
 async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     bot: Bot = manager.middleware_data["bot"]
@@ -149,4 +159,5 @@ broadcast_dialog = Dialog(
         state=AdminBroadcast.confirm,
         getter=confirm_getter,
     ),
+    on_start=on_dialog_start,
 )

@@ -15,6 +15,12 @@ from proxy_bot.utils.html import esc
 
 from ..common import icon
 from ..widgets import I18N
+from .access import ensure_admin, leave_admin_area
+
+
+async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
 
 
 class AdminUsers(StatesGroup):
@@ -68,7 +74,14 @@ async def users_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
 
 
 async def on_user_selected(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
-    manager.dialog_data["selected_user_id"] = int(item_id)
+    # item_id is a Select item id echoed back verbatim from callback_data,
+    # not re-validated against the currently rendered user list - guard the
+    # cast rather than assume it's still one of this window's own ids.
+    try:
+        selected_user_id = int(item_id)
+    except ValueError:
+        return
+    manager.dialog_data["selected_user_id"] = selected_user_id
     await manager.switch_to(AdminUsers.detail)
 
 
@@ -107,6 +120,10 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
 
 
 async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
@@ -125,6 +142,10 @@ async def back_to_list(_callback: CallbackQuery, _button: Button, manager: Dialo
 
 
 async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
     storage: Storage = manager.middleware_data["storage"]
     admin = manager.middleware_data["event_from_user"]
     user_id = manager.dialog_data.get("selected_user_id")
@@ -200,4 +221,5 @@ users_dialog = Dialog(
         state=AdminUsers.detail,
         getter=users_detail_getter,
     ),
+    on_start=on_dialog_start,
 )
