@@ -3,13 +3,14 @@ from __future__ import annotations
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Case, List, Multi
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 
 from ..common import icon
+from ..widgets import I18N
 from .enter_code import EnterCode
 
 
@@ -31,37 +32,28 @@ async def on_enter_code_result(_start_data: object, result: object, manager: Dia
         manager.dialog_data["banner"] = result["banner"]
 
 
-async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     user = dialog_manager.middleware_data["event_from_user"]
     db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
 
-    if not db_user.codes:
-        title = i18n.get("link-none")
-    else:
-        lines = [i18n.get("link-header")]
-        for code in db_user.codes:
-            code_record = await storage.codes.get(code)
-            if code_record is None:
-                continue
-            lines.append(
-                i18n.get(
-                    "link-item",
-                    description=esc(code_record.description or code_record.code),
-                    code=esc(code_record.code),
-                    links=format_links(code_record.links),
-                )
-            )
-        title = "\n\n".join(lines)
-
-    banner = dialog_manager.dialog_data.pop("banner", None)
-    if banner:
-        title = f"{banner}\n\n{title}"
+    link_items = []
+    for code in db_user.codes:
+        code_record = await storage.codes.get(code)
+        if code_record is None:
+            continue
+        link_items.append(
+            {
+                "description": esc(code_record.description or code_record.code),
+                "code": esc(code_record.code),
+                "links": format_links(code_record.links),
+            }
+        )
 
     return {
-        "title": title,
-        "btn_enter_code": i18n.get("menu-btn-enter-code"),
-        "back": i18n.get("menu-btn-back"),
+        "banner": dialog_manager.dialog_data.pop("banner", None),
+        "has_links": bool(link_items),
+        "link_items": link_items,
     }
 
 
@@ -71,14 +63,37 @@ async def open_enter_code(_callback, _button, manager: DialogManager) -> None:
 
 links_dialog = Dialog(
     Window(
-        Format("{title}"),
+        Multi(
+            I18N("{banner}", when="banner"),
+            Case(
+                {
+                    True: Multi(
+                        I18N("link-header"),
+                        List(
+                            I18N(
+                                "link-item",
+                                description="{item[description]}",
+                                code="{item[code]}",
+                                links="{item[links]}",
+                            ),
+                            items="link_items",
+                            sep="\n\n",
+                        ),
+                        sep="\n\n",
+                    ),
+                    False: I18N("link-none"),
+                },
+                selector="has_links",
+            ),
+            sep="\n\n",
+        ),
         Button(
-            Format("{btn_enter_code}"),
+            I18N("menu-btn-enter-code"),
             id="open_enter_code_from_links",
             on_click=open_enter_code,
             style=icon("heavy_plus_sign"),
         ),
-        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Links.main,
         getter=links_getter,
     ),

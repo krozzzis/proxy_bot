@@ -5,12 +5,13 @@ import logging
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Group
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Case
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.html import esc
 
 from ..common import icon
+from ..widgets import I18N
 from .activation import activate_code
 from .enter_code import EnterCode
 from .help import Help
@@ -38,14 +39,12 @@ async def on_dialog_start(start_data: object, dialog_manager: DialogManager) -> 
     if not auto_code:
         return
 
-    i18n = dialog_manager.middleware_data["i18n"]
-
     status, _code_record = await activate_code(storage, user, auto_code)
     if status in ("banned", "invalid"):
         await dialog_manager.start(EnterCode.main, data={"error": status})
     else:
-        banner = i18n.get("code-already-added") if status == "already" else i18n.get("code-accepted")
-        await dialog_manager.start(Links.main, data={"banner": banner})
+        banner_key = "code-already-added" if status == "already" else "code-accepted"
+        await dialog_manager.start(Links.main, data={"banner": banner_key})
 
 
 async def on_enter_code_result(_start_data: object, result: object, manager: DialogManager) -> None:
@@ -77,7 +76,7 @@ async def open_admin_panel(_callback, _button: Button, manager: DialogManager) -
 
 
 async def main_menu_getter(
-    dialog_manager: DialogManager, i18n, event_from_user, storage: Storage, **kwargs
+    dialog_manager: DialogManager, event_from_user, storage: Storage, **kwargs
 ) -> dict:
     db_user = await storage.users.get_or_create(event_from_user.id, event_from_user.username, event_from_user.full_name)
     has_codes = bool(db_user.codes)
@@ -85,16 +84,11 @@ async def main_menu_getter(
     # Shown once, right after a fresh /start - not on every return to this
     # window, so the greeting doesn't repeat every time the user navigates
     # back to the main menu.
-    if dialog_manager.dialog_data.pop("greet", False):
-        title = i18n.get("menu-title-greeting", name=esc(event_from_user.full_name), count=len(db_user.codes))
-    else:
-        title = i18n.get("menu-title", count=len(db_user.codes))
+    greeting = dialog_manager.dialog_data.pop("greet", False)
     return {
-        "title": title,
-        "btn_enter_code": i18n.get("menu-btn-enter-code"),
-        "btn_links": i18n.get("menu-btn-links"),
-        "btn_help": i18n.get("menu-btn-help"),
-        "btn_admin": i18n.get("menu-btn-admin"),
+        "greeting": greeting,
+        "name": esc(event_from_user.full_name),
+        "count": len(db_user.codes),
         "has_codes": has_codes,
         "no_codes": not has_codes,
         "is_admin": await storage.admins.is_admin(event_from_user.id),
@@ -103,7 +97,10 @@ async def main_menu_getter(
 
 user_menu_dialog = Dialog(
     Window(
-        Format("{title}"),
+        Case(
+            {True: I18N("menu-title-greeting"), False: I18N("menu-title")},
+            selector="greeting",
+        ),
         # Passed directly to Window (not wrapped in Column, which is
         # Group(width=1) and would flatten every button below into its
         # own row regardless of the nested Group's width - Window
@@ -115,9 +112,9 @@ user_menu_dialog = Dialog(
         # code" while they don't - mirroring how Liberty VPN swaps its
         # single main-menu button between "Test" and "Manage
         # subscription" depending on account state.
-        Button(Format("{btn_links}"), id="primary_links", on_click=open_links, when="has_codes", style=icon("key")),
+        Button(I18N("menu-btn-links"), id="primary_links", on_click=open_links, when="has_codes", style=icon("key")),
         Button(
-            Format("{btn_enter_code}"),
+            I18N("menu-btn-enter-code"),
             id="primary_enter_code",
             on_click=open_enter_code,
             when="no_codes",
@@ -125,17 +122,17 @@ user_menu_dialog = Dialog(
         ),
         Group(
             Button(
-                Format("{btn_enter_code}"),
+                I18N("menu-btn-enter-code"),
                 id="open_enter_code",
                 on_click=open_enter_code,
                 when="has_codes",
                 style=icon("heavy_plus_sign"),
             ),
-            Button(Format("{btn_links}"), id="open_links", on_click=open_links, when="no_codes", style=icon("key")),
-            Button(Format("{btn_help}"), id="open_help", on_click=open_help, style=icon("question")),
+            Button(I18N("menu-btn-links"), id="open_links", on_click=open_links, when="no_codes", style=icon("key")),
+            Button(I18N("menu-btn-help"), id="open_help", on_click=open_help, style=icon("question")),
             width=2,
         ),
-        Button(Format("{btn_admin}"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("gear")),
+        Button(I18N("menu-btn-admin"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("gear")),
         state=UserMenu.main,
         getter=main_menu_getter,
     ),

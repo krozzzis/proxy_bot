@@ -7,8 +7,8 @@ from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
-from aiogram_dialog.widgets.text import Format
 from aiogram_dialog.widgets.style.base import ButtonStyle
+from aiogram_dialog.widgets.text import List, Multi
 
 from proxy_bot.commands import set_admin_commands
 from proxy_bot.storage import Storage
@@ -16,6 +16,7 @@ from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
+from ..widgets import I18N
 
 logger = logging.getLogger(__name__)
 
@@ -25,25 +26,18 @@ class AdminAdmins(StatesGroup):
     enter_id = State()
 
 
-async def admins_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     admins = await storage.admins.all()
-    lines = [i18n.get("admin-admins-title", count=len(admins)), ""]
-    for admin in admins:
-        name = f"@{admin.username}" if admin.username else str(admin.user_id)
-        lines.append(i18n.get("admin-admins-item", name=esc(name), id=str(admin.user_id)))
-    return {
-        "title": "\n".join(lines),
-        "add_admin": i18n.get("admin-btn-add-admin"),
-        "back": i18n.get("admin-btn-back"),
-    }
+    items = [
+        {"name": esc(f"@{admin.username}" if admin.username else str(admin.user_id)), "id": str(admin.user_id)}
+        for admin in admins
+    ]
+    return {"count": len(admins), "admins": items}
 
 
-async def enter_id_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
-    prompt = i18n.get("admin-add-admin-prompt")
-    if dialog_manager.dialog_data.get("id_error"):
-        prompt = f"{i18n.get('admin-add-admin-invalid')}\n\n{prompt}"
-    return {"prompt": prompt, "cancel": i18n.get("admin-btn-cancel")}
+async def enter_id_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    return {"id_error": dialog_manager.dialog_data.get("id_error", False)}
 
 
 async def on_id_error(message: Message, widget: ManagedTextInput, manager: DialogManager, error: ValueError) -> None:
@@ -77,14 +71,18 @@ async def open_enter_id(_callback: CallbackQuery, _button: Button, manager: Dial
 
 admins_dialog = Dialog(
     Window(
-        Format("{title}"),
-        Button(Format("{add_admin}"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
-        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        Multi(
+            I18N("admin-admins-title"),
+            List(I18N("admin-admins-item", name="{item[name]}", id="{item[id]}"), items="admins", sep="\n"),
+            sep="\n\n",
+        ),
+        Button(I18N("admin-btn-add-admin"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
+        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminAdmins.list,
         getter=admins_list_getter,
     ),
     Window(
-        Format("{prompt}"),
+        Multi(I18N("admin-add-admin-invalid", when="id_error"), I18N("admin-add-admin-prompt"), sep="\n\n"),
         TextInput(
             id="admin_id_input",
             type_factory=int,
@@ -92,11 +90,7 @@ admins_dialog = Dialog(
             on_error=on_id_error,
             filter=not_a_command,
         ),
-        #SwitchTo(Format("{back}"), id="back_to_list", state=AdminAdmins.list, style=icon("arrow_backward")),
-        SwitchTo(Format("{cancel}"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
-
-        #Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
-
+        SwitchTo(I18N("admin-btn-cancel"), id="back_to_list", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
         state=AdminAdmins.enter_id,
         getter=enter_id_getter,
     ),

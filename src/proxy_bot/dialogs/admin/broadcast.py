@@ -10,13 +10,14 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Case, Format
 
 from proxy_bot.storage import Storage, User
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
+from ..widgets import I18N
 
 
 class AdminBroadcast(StatesGroup):
@@ -30,15 +31,6 @@ logger = logging.getLogger(__name__)
 THROTTLE_SECONDS = 0.05
 
 
-async def choose_target_getter(i18n, **kwargs) -> dict:
-    return {
-        "prompt": i18n.get("admin-broadcast-target-prompt"),
-        "target_all": i18n.get("admin-broadcast-target-all"),
-        "target_code": i18n.get("admin-broadcast-target-code"),
-        "cancel": i18n.get("admin-btn-cancel"),
-    }
-
-
 async def choose_all(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     manager.dialog_data["target"] = "all"
     manager.dialog_data.pop("target_code", None)
@@ -50,21 +42,16 @@ async def choose_by_code(_callback: CallbackQuery, _button: Button, manager: Dia
     await manager.switch_to(AdminBroadcast.choose_code)
 
 
-async def choose_code_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def choose_code_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     codes = await storage.codes.all()
-    items = [{"id": c.code, "label": f"{c.code} — {c.description}" if c.description else c.code} for c in codes]
-    title = i18n.get("admin-broadcast-choose-code") if codes else i18n.get("admin-broadcast-no-codes")
-    return {"title": title, "codes": items, "back": i18n.get("admin-btn-back")}
+    items = [{"id": c.code, "code": c.code, "description": esc(c.description) if c.description else ""} for c in codes]
+    return {"has_codes": bool(codes), "codes": items}
 
 
 async def on_code_chosen(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
     manager.dialog_data["target_code"] = item_id
     await manager.switch_to(AdminBroadcast.enter_text)
-
-
-async def enter_text_getter(i18n, **kwargs) -> dict:
-    return {"prompt": i18n.get("admin-broadcast-prompt-text"), "back": i18n.get("admin-btn-back")}
 
 
 async def on_text_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, text: str) -> None:
@@ -80,14 +67,10 @@ async def _recipients(manager: DialogManager) -> list[User]:
     return await storage.users.all()
 
 
-async def confirm_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def confirm_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     recipients = await _recipients(dialog_manager)
     text = dialog_manager.dialog_data.get("broadcast_text", "")
-    return {
-        "confirm_text": i18n.get("admin-broadcast-confirm", count=len(recipients), text=esc(text)),
-        "confirm": i18n.get("admin-btn-confirm"),
-        "cancel": i18n.get("admin-btn-cancel"),
-    }
+    return {"count": len(recipients), "text": esc(text)}
 
 
 async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -127,38 +110,42 @@ async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: Dia
 
 broadcast_dialog = Dialog(
     Window(
-        Format("{prompt}"),
-        Button(Format("{target_all}"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
-        Button(Format("{target_code}"), id="target_code", on_click=choose_by_code, style=icon("package")),
-        Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+        I18N("admin-broadcast-target-prompt"),
+        Button(I18N("admin-broadcast-target-all"), id="target_all", on_click=choose_all, style=icon("bust_in_silhouette")),
+        Button(I18N("admin-broadcast-target-code"), id="target_code", on_click=choose_by_code, style=icon("package")),
+        Cancel(I18N("admin-btn-cancel"), style=icon("x", ButtonStyle.DANGER)),
         state=AdminBroadcast.choose_target,
-        getter=choose_target_getter,
     ),
     Window(
-        Format("{title}"),
+        Case(
+            {True: I18N("admin-broadcast-choose-code"), False: I18N("admin-broadcast-no-codes")},
+            selector="has_codes",
+        ),
         Select(
-            Format("{item[label]}"),
+            Case(
+                {True: Format("{item[code]} — {item[description]}"), False: Format("{item[code]}")},
+                selector=lambda data, widget, manager: bool(data["item"]["description"]),
+            ),
             id="code_select",
             item_id_getter=lambda item: item["id"],
             items="codes",
             on_click=on_code_chosen,
             style=icon("package"),
         ),
-        SwitchTo(Format("{back}"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
         state=AdminBroadcast.choose_code,
         getter=choose_code_getter,
     ),
     Window(
-        Format("{prompt}"),
+        I18N("admin-broadcast-prompt-text"),
         TextInput(id="broadcast_text", on_success=on_text_entered, filter=not_a_command),
-        SwitchTo(Format("{back}"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
         state=AdminBroadcast.enter_text,
-        getter=enter_text_getter,
     ),
     Window(
-        Format("{confirm_text}"),
-        Button(Format("{confirm}"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-        Cancel(Format("{cancel}"), style=icon("x", ButtonStyle.DANGER)),
+        I18N("admin-broadcast-confirm"),
+        Button(I18N("admin-btn-confirm"), id="confirm_send", on_click=on_confirm_send, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+        Cancel(I18N("admin-btn-cancel"), style=icon("x", ButtonStyle.DANGER)),
         state=AdminBroadcast.confirm,
         getter=confirm_getter,
     ),

@@ -4,9 +4,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, StartMode, Window
 from aiogram_dialog.widgets.kbd import Button, Group
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Multi
 
 from ..common import icon
+from ..widgets import I18N
 from .admins import AdminAdmins
 from .broadcast import AdminBroadcast
 from .codes import AdminCodes
@@ -20,26 +21,18 @@ class AdminMenu(StatesGroup):
 
 async def on_child_result(_start_data: object, result: object, manager: DialogManager) -> None:
     # create_code (and any future child that finishes with a confirmation)
-    # hands back {"banner": ...} - show it as part of this re-render
+    # hands back {"banner": ..., ...its Fluent args} - stash the whole dict
+    # under one key so this re-render can show it as part of the title
     # instead of a message of its own, sent separately and out of order.
+    # Keeping it as a single blob (rather than merging its keys straight
+    # into dialog_data) means a future child's args can't collide with
+    # unrelated dialog_data fields or with each other.
     if isinstance(result, dict) and result.get("banner"):
-        manager.dialog_data["banner"] = result["banner"]
+        manager.dialog_data["banner_args"] = result
 
 
-async def admin_menu_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
-    title = i18n.get("admin-menu-title")
-    banner = dialog_manager.dialog_data.pop("banner", None)
-    if banner:
-        title = f"{banner}\n\n{title}"
-    return {
-        "title": title,
-        "btn_create_code": i18n.get("admin-btn-create-code"),
-        "btn_codes": i18n.get("admin-btn-codes"),
-        "btn_users": i18n.get("admin-btn-users"),
-        "btn_admins": i18n.get("admin-btn-admins"),
-        "btn_broadcast": i18n.get("admin-btn-broadcast"),
-        "btn_close": i18n.get("admin-btn-close"),
-    }
+async def admin_menu_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    return dialog_manager.dialog_data.pop("banner_args", {"banner": None})
 
 
 async def open_create_code(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -81,16 +74,16 @@ async def close_menu(_callback: CallbackQuery, _button: Button, manager: DialogM
 
 admin_menu_dialog = Dialog(
     Window(
-        Format("{title}"),
+        Multi(I18N("{banner}", when="banner"), I18N("admin-menu-title"), sep="\n\n"),
         Group(
-            Button(Format("{btn_create_code}"), id="create_code", on_click=open_create_code, style=icon("heavy_plus_sign")),
-            Button(Format("{btn_codes}"), id="codes", on_click=open_codes, style=icon("package")),
-            Button(Format("{btn_users}"), id="users", on_click=open_users, style=icon("bust_in_silhouette")),
-            Button(Format("{btn_admins}"), id="admins", on_click=open_admins, style=icon("shield")),
-            Button(Format("{btn_broadcast}"), id="broadcast", on_click=open_broadcast, style=icon("loudspeaker")),
+            Button(I18N("admin-btn-create-code"), id="create_code", on_click=open_create_code, style=icon("heavy_plus_sign")),
+            Button(I18N("admin-btn-codes"), id="codes", on_click=open_codes, style=icon("package")),
+            Button(I18N("admin-btn-users"), id="users", on_click=open_users, style=icon("bust_in_silhouette")),
+            Button(I18N("admin-btn-admins"), id="admins", on_click=open_admins, style=icon("shield")),
+            Button(I18N("admin-btn-broadcast"), id="broadcast", on_click=open_broadcast, style=icon("loudspeaker")),
             width=2,
         ),
-        Button(Format("{btn_close}"), id="close", on_click=close_menu, style=icon("arrow_backward")),
+        Button(I18N("admin-btn-close"), id="close", on_click=close_menu, style=icon("arrow_backward")),
         state=AdminMenu.main,
         getter=admin_menu_getter,
     ),

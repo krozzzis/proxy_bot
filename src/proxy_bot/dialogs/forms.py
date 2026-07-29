@@ -10,10 +10,11 @@ from aiogram_dialog import DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel
 from aiogram_dialog.widgets.style.base import Style
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Multi
 from pydantic import TypeAdapter, ValidationError
 
 from .common import icon, not_a_command
+from .widgets import I18N
 
 AsyncCheck = Callable[[Any, DialogManager], Awaitable[str | None]]
 OnFieldDone = Callable[[Any, DialogManager], Awaitable[None]]
@@ -81,25 +82,18 @@ def build_field_window(
         manager.dialog_data.pop("error", None)
         await on_done(field.default, manager)
 
-    async def getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
-        prompt = i18n.get(field.prompt)
-        error = dialog_manager.dialog_data.get("error")
-        if error:
-            prompt = f"{i18n.get(error)}\n\n{prompt}"
-        result: dict[str, Any] = {"prompt": prompt, "cancel": i18n.get(cancel_label)}
-        if field.optional:
-            assert field.skip_label is not None, f"field {field.name!r} is optional but has no skip_label"
-            result["skip"] = i18n.get(field.skip_label)
-        return result
+    async def getter(dialog_manager: DialogManager, **kwargs) -> dict:
+        return {"error": dialog_manager.dialog_data.get("error")}
 
     widgets = [
-        Format("{prompt}"),
+        Multi(I18N("{error}", when="error"), I18N(field.prompt), sep="\n\n"),
         TextInput(id=f"form_{field.name}", on_success=on_input, filter=not_a_command),
     ]
     if field.optional:
+        assert field.skip_label is not None, f"field {field.name!r} is optional but has no skip_label"
         widgets.append(
-            Button(Format("{skip}"), id=f"form_{field.name}_skip", on_click=on_skip, style=icon("chevron_right"))
+            Button(I18N(field.skip_label), id=f"form_{field.name}_skip", on_click=on_skip, style=icon("chevron_right"))
         )
-    widgets.append(Cancel(Format("{cancel}"), style=cancel_style))
+    widgets.append(Cancel(I18N(cancel_label), style=cancel_style))
 
     return Window(*widgets, state=state, getter=getter)

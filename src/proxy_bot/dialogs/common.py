@@ -34,15 +34,6 @@ CUSTOM_EMOJI = {
 }
 
 
-def paginated_title(i18n, title: str, page: int, total_pages: int) -> str:
-    """Append a "· page/total" suffix, but only once there's more than one
-    page - a lone "(1/1)" next to a count that already says there's just
-    one item is redundant noise, not information."""
-    if total_pages <= 1:
-        return title
-    return f"{title} {i18n.get('admin-page-indicator', page=page + 1, total=total_pages)}"
-
-
 def icon(name: str, color: ButtonStyle | None = None, when: WhenCondition = None) -> Style:
     """Button style carrying a pack icon and, for confirm/cancel-type actions
     only, an accent color - plain navigation buttons stay icon-only so color

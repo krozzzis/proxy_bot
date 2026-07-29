@@ -8,13 +8,14 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Case, Format, List, Multi
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
-from ..common import icon, not_a_command, paginated_title
+from ..common import icon, not_a_command
+from ..widgets import I18N
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class AdminCodes(StatesGroup):
 PAGE_SIZE = 8
 
 
-async def codes_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def codes_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     codes = await storage.codes.all()
     codes.sort(key=lambda c: c.created_at, reverse=True)
@@ -41,25 +42,19 @@ async def codes_list_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
     items = [
         {
             "id": c.code,
-            "label": i18n.get(
-                "admin-codes-item",
-                code=c.code,
-                description=c.description or "—",
-                count=len(c.links),
-            ),
+            "code": c.code,
+            "description": esc(c.description or "—"),
+            "count": len(c.links),
         }
         for c in chunk
     ]
-    if codes:
-        title = paginated_title(i18n, i18n.get("admin-codes-title", count=len(codes)), page, total_pages)
-    else:
-        title = i18n.get("admin-codes-empty")
     return {
-        "title": title,
+        "has_codes": bool(codes),
+        "count": len(codes),
+        "has_pages": total_pages > 1,
+        "page": page + 1,
+        "total": total_pages,
         "codes": items,
-        "back": i18n.get("admin-btn-back"),
-        "prev": i18n.get("admin-btn-prev"),
-        "next": i18n.get("admin-btn-next"),
     }
 
 
@@ -76,42 +71,24 @@ async def on_next_page(_callback: CallbackQuery, _button: Button, manager: Dialo
     manager.dialog_data["page"] = manager.dialog_data.get("page", 0) + 1
 
 
-async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     code_id = dialog_manager.dialog_data.get("selected_code")
     code = await storage.codes.get(code_id) if code_id else None
 
     if code is None:
-        return {
-            "title": i18n.get("admin-codes-empty"),
-            "link_items": [],
-            "back": i18n.get("admin-btn-back"),
-            "add_link": "",
-            "edit_description": "",
-            "delete_code": "",
-        }
-
-    lines = [i18n.get("admin-code-detail-title", code=esc(code.code), description=esc(code.description or "—"))]
-    if code.links:
-        lines.append("")
-        lines.extend(f"{idx}. <code>{esc(link)}</code>" for idx, link in enumerate(code.links, start=1))
-    else:
-        lines.append("")
-        lines.append(i18n.get("admin-code-no-links"))
+        return {"found": False}
 
     # Links can be far longer than Telegram's 64-byte callback_data limit,
     # so the remove-link buttons address links by position, not by value.
-    link_items = [
-        {"id": str(idx), "label": i18n.get("admin-code-remove-link-btn", n=idx + 1)}
-        for idx in range(len(code.links))
-    ]
+    link_items = [{"id": str(idx), "n": idx + 1} for idx in range(len(code.links))]
     return {
-        "title": "\n".join(lines),
+        "found": True,
+        "code": esc(code.code),
+        "description": esc(code.description or "—"),
+        "has_links": bool(code.links),
+        "links": [esc(link) for link in code.links],
         "link_items": link_items,
-        "add_link": i18n.get("admin-btn-add-link"),
-        "edit_description": i18n.get("admin-btn-edit-description"),
-        "delete_code": i18n.get("admin-btn-delete-code"),
-        "back": i18n.get("admin-btn-back"),
     }
 
 
@@ -137,10 +114,6 @@ async def open_add_link(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminCodes.enter_link)
 
 
-async def enter_link_getter(i18n, **kwargs) -> dict:
-    return {"prompt": i18n.get("admin-code-add-link-prompt"), "back": i18n.get("admin-btn-back")}
-
-
 async def on_link_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, link_text: str) -> None:
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
@@ -157,10 +130,6 @@ async def on_link_entered(message: Message, widget: ManagedTextInput, manager: D
 
 async def open_edit_description(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     await manager.switch_to(AdminCodes.edit_description)
-
-
-async def edit_description_getter(i18n, **kwargs) -> dict:
-    return {"prompt": i18n.get("admin-code-edit-description-prompt"), "back": i18n.get("admin-btn-back")}
 
 
 async def on_description_entered(
@@ -194,10 +163,16 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
 
 codes_dialog = Dialog(
     Window(
-        Format("{title}"),
+        Case(
+            {
+                True: Multi(I18N("admin-codes-title"), I18N("admin-page-indicator", when="has_pages"), sep=" "),
+                False: I18N("admin-codes-empty"),
+            },
+            selector="has_codes",
+        ),
         Column(
             Select(
-                Format("{item[label]}"),
+                I18N("admin-codes-item", code="{item[code]}", description="{item[description]}", count="{item[count]}"),
                 id="code_select",
                 item_id_getter=lambda item: item["id"],
                 items="codes",
@@ -206,18 +181,34 @@ codes_dialog = Dialog(
             ),
         ),
         Row(
-            Button(Format("{prev}"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
-            Button(Format("{next}"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
+            Button(I18N("admin-btn-prev"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
+            Button(I18N("admin-btn-next"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
         ),
-        Cancel(Format("{back}"), style=icon("arrow_backward")),
+        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminCodes.list,
         getter=codes_list_getter,
     ),
     Window(
-        Format("{title}"),
+        Case(
+            {
+                True: Multi(
+                    I18N("admin-code-detail-title"),
+                    Case(
+                        {
+                            True: List(Format("{pos}. <code>{item}</code>"), items="links", sep="\n"),
+                            False: I18N("admin-code-no-links"),
+                        },
+                        selector="has_links",
+                    ),
+                    sep="\n\n",
+                ),
+                False: I18N("admin-codes-empty"),
+            },
+            selector="found",
+        ),
         Column(
             Select(
-                Format("{item[label]}"),
+                I18N("admin-code-remove-link-btn", n="{item[n]}"),
                 id="remove_link_select",
                 item_id_getter=lambda item: item["id"],
                 items="link_items",
@@ -225,25 +216,35 @@ codes_dialog = Dialog(
                 style=icon("x", ButtonStyle.DANGER),
             ),
         ),
-        Button(Format("{add_link}"), id="add_link", on_click=open_add_link, style=icon("heavy_plus_sign")),
-        Button(Format("{edit_description}"), id="edit_description", on_click=open_edit_description, style=icon("pencil2")),
-        Button(Format("{delete_code}"), id="delete_code", on_click=on_delete_code, style=icon("wastebasket", ButtonStyle.DANGER)),
-        SwitchTo(Format("{back}"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
+        Button(I18N("admin-btn-add-link"), id="add_link", on_click=open_add_link, when="found", style=icon("heavy_plus_sign")),
+        Button(
+            I18N("admin-btn-edit-description"),
+            id="edit_description",
+            on_click=open_edit_description,
+            when="found",
+            style=icon("pencil2"),
+        ),
+        Button(
+            I18N("admin-btn-delete-code"),
+            id="delete_code",
+            on_click=on_delete_code,
+            when="found",
+            style=icon("wastebasket", ButtonStyle.DANGER),
+        ),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
         state=AdminCodes.detail,
         getter=codes_detail_getter,
     ),
     Window(
-        Format("{prompt}"),
+        I18N("admin-code-add-link-prompt"),
         TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
-        SwitchTo(Format("{back}"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.enter_link,
-        getter=enter_link_getter,
     ),
     Window(
-        Format("{prompt}"),
+        I18N("admin-code-edit-description-prompt"),
         TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
-        SwitchTo(Format("{back}"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.edit_description,
-        getter=edit_description_getter,
     ),
 )

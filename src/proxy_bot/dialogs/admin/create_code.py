@@ -9,7 +9,7 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.text import Format, List, Multi
 from pydantic import StringConstraints, TypeAdapter
 
 from proxy_bot.storage import Storage
@@ -18,6 +18,7 @@ from proxy_bot.utils.html import esc
 
 from ..common import icon, not_a_command
 from ..forms import FormField, build_field_window
+from ..widgets import I18N
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +64,12 @@ DESCRIPTION_FIELD = FormField(
 )
 
 
-async def step_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def step_links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     links = dialog_manager.dialog_data.get("new_links", [])
-    lines = [i18n.get("admin-create-code-prompt-link")]
-    if links:
-        lines.append("")
-        lines.append(i18n.get("admin-create-code-links-added", count=len(links)))
-        lines.extend(f"{idx}. <code>{esc(link)}</code>" for idx, link in enumerate(links, start=1))
     return {
-        "prompt": "\n".join(lines),
-        "cancel": i18n.get("admin-btn-cancel"),
-        "done": i18n.get("admin-btn-done"),
-        "undo": i18n.get("admin-btn-undo"),
         "has_links": bool(links),
+        "count": len(links),
+        "links": [esc(link) for link in links],
     }
 
 
@@ -104,7 +98,6 @@ async def on_links_done(_callback: CallbackQuery, _button: Button, manager: Dial
 
 async def on_description_done(description: str, manager: DialogManager) -> None:
     storage: Storage = manager.middleware_data["storage"]
-    i18n = manager.middleware_data["i18n"]
     user = manager.middleware_data["event_from_user"]
 
     code = manager.dialog_data["new_code"]
@@ -112,22 +105,30 @@ async def on_description_done(description: str, manager: DialogManager) -> None:
     await storage.codes.create(code=code, links=links, description=description, created_by=user.id)
     logger.info("%s created code %r with %d link(s)", actor(user), code, len(links))
 
-    banner = i18n.get("admin-create-code-done", code=esc(code))
     # Handed to the admin menu's on_process_result, so the confirmation
     # renders as part of that same re-render instead of a message of its
     # own sent separately (and, since it edits a much older message,
     # out of order relative to it).
-    await manager.done(result={"banner": banner})
+    await manager.done(result={"banner": "admin-create-code-done", "code": esc(code)})
 
 
 create_code_dialog = Dialog(
     build_field_window(CODE_FIELD, AdminCreateCode.enter_code, on_code_done, "admin-btn-cancel", _CANCEL_STYLE),
     Window(
-        Format("{prompt}"),
+        Multi(
+            I18N("admin-create-code-prompt-link"),
+            Multi(
+                I18N("admin-create-code-links-added"),
+                List(Format("{pos}. <code>{item}</code>"), items="links", sep="\n"),
+                sep="\n",
+                when="has_links",
+            ),
+            sep="\n\n",
+        ),
         TextInput(id="cc_link", on_success=on_link_added, filter=not_a_command),
-        Button(Format("{undo}"), id="undo_link", on_click=on_undo_last_link, when="has_links", style=icon("leftwards_arrow_with_hook")),
-        Button(Format("{done}"), id="links_done", on_click=on_links_done, when="has_links", style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-        Cancel(Format("{cancel}"), style=_CANCEL_STYLE),
+        Button(I18N("admin-btn-undo"), id="undo_link", on_click=on_undo_last_link, when="has_links", style=icon("leftwards_arrow_with_hook")),
+        Button(I18N("admin-btn-done"), id="links_done", on_click=on_links_done, when="has_links", style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+        Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
         state=AdminCreateCode.enter_links,
         getter=step_links_getter,
     ),
