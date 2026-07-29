@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import List, Multi
 
@@ -39,7 +39,12 @@ async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
         {"name": esc(f"@{admin.username}" if admin.username else str(admin.user_id)), "id": str(admin.user_id)}
         for admin in admins
     ]
-    return {"count": len(admins), "admins": items}
+    # The root admin comes from config (ROOT_ADMIN_ID), not the TOML file -
+    # AdminRepo.remove() only ever touches TOML entries, so a remove button
+    # for that row would be a dead click. Leave it out instead of rendering
+    # a button that can never do anything.
+    removable = [item for item, admin in zip(items, admins) if admin.user_id != storage.admins.root_admin_id]
+    return {"count": len(admins), "admins": items, "removable_admins": removable}
 
 
 async def enter_id_getter(dialog_manager: DialogManager, **kwargs) -> dict:
@@ -79,12 +84,45 @@ async def open_enter_id(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminAdmins.enter_id)
 
 
+async def on_admin_removed(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
+    admin = manager.middleware_data["event_from_user"]
+
+    try:
+        target_id = int(item_id)
+    except ValueError:
+        return
+
+    removed = await storage.admins.remove(target_id)
+    if not removed:
+        return
+    target_user = await storage.users.get(target_id)
+    target = actor_id(target_id, target_user.username if target_user else None)
+    logger.info("%s revoked admin rights from %s", actor(admin), target)
+    await callback.answer(i18n.get("admin-remove-admin-done", id=str(target_id)), show_alert=True)
+
+
 admins_dialog = Dialog(
     Window(
         Multi(
             I18N("admin-admins-title"),
             List(I18N("admin-admins-item", name="{item[name]}", id="{item[id]}"), items="admins", sep="\n"),
             sep="\n\n",
+        ),
+        Column(
+            Select(
+                I18N("admin-remove-admin-btn", name="{item[name]}"),
+                id="remove_admin_select",
+                item_id_getter=lambda item: item["id"],
+                items="removable_admins",
+                on_click=on_admin_removed,
+                style=icon("x", ButtonStyle.DANGER),
+            ),
         ),
         Button(I18N("admin-btn-add-admin"), id="add_admin", on_click=open_enter_id, style=icon("heavy_plus_sign")),
         Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),

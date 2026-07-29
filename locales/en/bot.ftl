@@ -116,6 +116,7 @@ admin-user-revoke-btn = Revoke "{ $code }"
 admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = Ban user
 admin-user-unban-btn = Unban user
+admin-user-ban-admin-denied = Can't ban an administrator. Revoke their admin rights first, in the Administrators section.
 
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Administrators</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
@@ -124,6 +125,8 @@ admin-add-admin-prompt = Send the numeric Telegram ID of the new administrator.
 admin-add-admin-invalid = Invalid ID. Send a number — the user's Telegram ID.
 admin-add-admin-already = This user is already an administrator.
 admin-add-admin-done = [tg_emoji:5425143379656744388:white_check_mark] User { $id } is now an administrator.
+admin-remove-admin-btn = Revoke rights — { $name }
+admin-remove-admin-done = Administrator rights revoked from user { $id }.
 
 admin-broadcast-target-prompt = [tg_emoji:5422893770276381417:loudspeaker] Who should receive the message?
 admin-broadcast-target-all = All users

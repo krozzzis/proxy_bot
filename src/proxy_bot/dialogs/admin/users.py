@@ -147,6 +147,7 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
         return
 
     storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
     user_id = manager.dialog_data.get("selected_user_id")
 
@@ -154,6 +155,14 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
     if user is None:
         return
     new_state = not user.banned
+    # is_admin() doesn't consult the banned flag (see filters.IsAdmin), so
+    # a banned admin would keep full panel access while only losing code
+    # activation (activation.activate_code) - a confusing half-banned
+    # state with no real security benefit. Refuse the ban transition for a
+    # fellow admin instead; unbanning is always allowed.
+    if new_state and await storage.admins.is_admin(user_id):
+        await callback.answer(i18n.get("admin-user-ban-admin-denied"), show_alert=True)
+        return
     await storage.users.set_banned(user_id, new_state)
     target = actor_id(user_id, user.username)
     action = "banned" if new_state else "unbanned"

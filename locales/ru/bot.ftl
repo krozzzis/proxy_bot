@@ -116,6 +116,7 @@ admin-user-revoke-btn = Отобрать «{ $code }»
 admin-user-revoke-done = Код «{ $code }» отобран у пользователя { $id }.
 admin-user-ban-btn = Забанить пользователя
 admin-user-unban-btn = Разбанить пользователя
+admin-user-ban-admin-denied = Нельзя забанить администратора. Сначала снимите права в разделе «Администраторы».
 
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
@@ -124,6 +125,8 @@ admin-add-admin-prompt = Отправьте числовой Telegram ID нов�
 admin-add-admin-invalid = Некорректный ID. Отправьте число — Telegram ID пользователя.
 admin-add-admin-already = Этот пользователь уже администратор.
 admin-add-admin-done = [tg_emoji:5425143379656744388:white_check_mark] Пользователь { $id } назначен администратором.
+admin-remove-admin-btn = Снять права — { $name }
+admin-remove-admin-done = Права администратора сняты с пользователя { $id }.
 
 admin-broadcast-target-prompt = [tg_emoji:5422893770276381417:loudspeaker] Кому отправить сообщение?
 admin-broadcast-target-all = Всем пользователям
