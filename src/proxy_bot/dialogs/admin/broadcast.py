@@ -84,7 +84,6 @@ async def on_confirm_send(callback: CallbackQuery, _button: Button, manager: Dia
         await leave_admin_area(manager)
         return
 
-    storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
     bot: Bot = manager.middleware_data["bot"]
     admin = manager.middleware_data["event_from_user"]

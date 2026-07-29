@@ -3,6 +3,8 @@ name = "proxy-bot"
 version = "0.1.0"
 description = "Telegram bot that hands out access links by code, with an admin panel"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "krozzzis", email = "schumov.nn@gmail.com" }
 ]

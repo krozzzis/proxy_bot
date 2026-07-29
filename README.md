@@ -1,275 +1,89 @@
 # proxy_bot
 
-Telegram-бот выдачи доступа по кодам. Пользователь вводит код — получает одну
-или несколько ссылок. Администраторы создают и редактируют коды, управляют
-пользователями и рассылают сообщения через встроенную админ-панель.
+A Telegram bot that hands out access links by code. A user sends a code and
+gets one or more links back; admins create and manage codes through an
+inline admin panel.
 
-## Содержание
+## Features
 
-- [Возможности](#возможности)
-- [Стек](#стек)
-- [Быстрый старт](#быстрый-старт)
-- [Переменные окружения](#переменные-окружения)
-- [Команды бота](#команды-бота)
-- [Деплой](#деплой)
-  - [Docker вручную](#docker-вручную)
-  - [GitOps: автодеплой из GitHub](#gitops-автодеплой-из-github)
-- [Структура проекта](#структура-проекта)
+- **User**: `/start`, `/help`, `/link`, `/code` — one shared menu, no
+  duplicated logic. Enter a code, get its link(s), revisit them anytime.
+  One account can redeem several codes.
+- **Admin** (`/admin`, gated by `admins.toml` or `ROOT_ADMIN_ID`): create
+  and edit codes (multiple links per code), list users and their codes,
+  ban/unban, revoke codes, add admins, broadcast messages.
 
-## Возможности
+## Stack
 
-**Пользователь** — единое меню с inline-кнопками (`/start`, `/help`, `/link`,
-`/code` открывают соответствующие разделы этого же меню, не дублируя логику):
+Python 3.12, [aiogram 3](https://docs.aiogram.dev/) +
+[aiogram-dialog](https://aiogram-dialog.readthedocs.io/). Data lives in
+TOML files (`data/`). Dialog state uses SQLite for dev or Redis for
+production (`FSM_BACKEND`). Translations are [Fluent](https://projectfluent.org/)
+(`locales/ru`, `locales/en`), hot-reloaded on file change.
 
-- ввод кода доступа → одна или несколько ссылок сразу;
-- к одному аккаунту можно привязать несколько кодов;
-- повторный просмотр своих ссылок в любой момент.
-
-**Администратор** (`/admin`, доступно тем, кто есть в `admins.toml`, либо
-`ROOT_ADMIN_ID`):
-
-- создание кода с одной или несколькими ссылками;
-- просмотр и редактирование всех кодов (добавить/удалить ссылку, изменить
-  описание, удалить код);
-- список пользователей и их активированных кодов, отзыв кода, бан/разбан;
-- добавление новых администраторов;
-- рассылки — всем пользователям или только держателям конкретного кода.
-
-## Стек
-
-| Область | Решение |
-|---|---|
-| Бот-фреймворк | Python 3.12, [aiogram 3](https://docs.aiogram.dev/) + [aiogram-dialog](https://aiogram-dialog.readthedocs.io/) |
-| Данные бота | TOML-файлы (`data/users.toml`, `data/codes.toml`, `data/admins.toml`), атомарная запись через `asyncio.Lock` + write-tmp-then-replace |
-| FSM/состояние диалогов | SQLite для разработки (один файл, без внешних сервисов), Redis для продакшена — переключается `FSM_BACKEND` (`src/proxy_bot/fsm/`) |
-| Локализация | [Fluent](https://projectfluent.org/) (`locales/ru`, `locales/en`) через `aiogram-i18n`, см. ниже |
-| Логирование | ежедневная ротация, `logs/bot.log`, хранится 14 дней |
-| Разработка | Nix (devShell с python3.12 + uv) + uv |
-| Деплой | Docker / docker-compose, автообновление — GitHub Actions + GHCR + Watchtower |
-
-Локализация — без прямого юникода в `.ftl`-файлах
-(`EmojiFluentCompileCore` в `utils/i18n.py`):
-
-- `:shortcode:` — GitHub/Slack-алиасы (пакет `emoji`), например `:wave:` вместо 👋;
-- `[tg_emoji:<custom_emoji_id>:<fallback_shortcode>]` — Telegram Premium/custom
-  emoji по числовому id, с обычным shortcode как fallback-символом для
-  клиентов без поддержки custom emoji; разворачивается в
-  `<tg-emoji emoji-id="...">` (нужен HTML parse mode);
-- сами `.ftl`-файлы отслеживаются на лету (`watchfiles`,
-  `utils/i18n.py: watch_locales`) — правки в переводах подхватываются без
-  перезапуска бота.
-
-## Быстрый старт
+## Quick start
 
 ```sh
-nix develop            # даёт python3.12 и uv
-uv sync                # ставит зависимости в .venv
-cp .env.example .env   # заполнить BOT_TOKEN и ROOT_ADMIN_ID
-uv run proxy-bot       # запустить бота (long polling)
+nix develop            # python 3.12 + uv
+uv sync                # install dependencies
+cp .env.example .env   # set BOT_TOKEN and ROOT_ADMIN_ID
+uv run proxy-bot        # run (long polling)
 ```
 
-`ROOT_ADMIN_ID` — Telegram id пользователя, который всегда имеет доступ к
-`/admin`, даже до того как в `admins.toml` появится хоть одна запись.
-Остальных администраторов можно добавлять прямо из панели.
+`ROOT_ADMIN_ID` is a Telegram user id that always has `/admin` access,
+even before `admins.toml` exists. More admins can be added from the panel.
 
-## Переменные окружения
+## Configuration
 
-| Переменная | Обязательна | По умолчанию | Назначение |
+| Variable | Required | Default | Purpose |
 |---|:---:|---|---|
-| `BOT_TOKEN` | да | — | токен бота от @BotFather |
-| `ROOT_ADMIN_ID` | да | — | Telegram id корневого администратора |
-| `DATA_DIR` | нет | `./data` | каталог TOML-файлов |
-| `LOGS_DIR` | нет | `./logs` | каталог логов |
-| `LOCALES_DIR` | нет | `./locales` | каталог `.ftl`-файлов |
-| `DEFAULT_LOCALE` | нет | `ru` | локаль по умолчанию |
-| `LOG_LEVEL` | нет | `INFO` | уровень логирования |
-| `FSM_BACKEND` | нет | `sqlite` | хранилище состояния диалогов: `sqlite` или `redis` |
-| `FSM_SQLITE_PATH` | нет | `./data/fsm.sqlite3` | путь к файлу SQLite (если `FSM_BACKEND=sqlite`) |
-| `REDIS_URL` | если `redis` | — | `redis://host:6379/0`, обязателен при `FSM_BACKEND=redis` |
+| `BOT_TOKEN` | yes | — | token from @BotFather |
+| `ROOT_ADMIN_ID` | yes | — | root admin's Telegram id |
+| `DATA_DIR` | no | `./data` | TOML data directory |
+| `LOGS_DIR` | no | `./logs` | log directory |
+| `LOCALES_DIR` | no | `./locales` | `.ftl` translation directory |
+| `DEFAULT_LOCALE` | no | `ru` | default locale |
+| `LOG_LEVEL` | no | `INFO` | log level |
+| `FSM_BACKEND` | no | `sqlite` | dialog state store: `sqlite` or `redis` |
+| `FSM_SQLITE_PATH` | no | `./data/fsm.sqlite3` | used when `FSM_BACKEND=sqlite` |
+| `REDIS_URL` | if `redis` | — | e.g. `redis://localhost:6379/0` |
 
-Полный список с комментариями — в [`.env.example`](.env.example).
+See [`.env.example`](.env.example) for the full, commented list.
 
-## Команды бота
-
-Все команды лишь открывают соответствующий раздел единого меню:
-
-| Команда | Действие |
-|---|---|
-| `/start` | приветствие и открытие меню |
-| `/help` | раздел «Помощь» |
-| `/link` | раздел «Мои ссылки» |
-| `/code` | раздел «Ввести код» (ссылок на аккаунте может быть несколько) |
-| `/admin` | админ-панель (только для администраторов) |
-
-## Деплой
-
-### Docker вручную
+## Deploy
 
 ```sh
-cp .env.example .env       # заполнить BOT_TOKEN и ROOT_ADMIN_ID
-mkdir -p data logs          # data/ и logs/ не в git — создаются один раз
+cp .env.example .env
+mkdir -p data logs
 docker compose up -d --build
 ```
 
-`data/` и `logs/` смонтированы как volume — состояние переживает пересоздание
-контейнера. По умолчанию используется SQLite (`data/fsm.sqlite3`) — поднимать
-для него ничего дополнительно не нужно.
-
-Чтобы вместо SQLite использовать Redis (рекомендуется для прода, особенно при
-масштабировании за пределы одного контейнера), в `.env` укажите:
-
-```env
-FSM_BACKEND=redis
-REDIS_URL=redis://redis:6379/0
-```
-
-и запустите с профилем `redis` — тогда поднимется и сам Redis:
+`data/` and `logs/` are mounted volumes, so state survives container
+recreation. To use Redis instead of SQLite, set `FSM_BACKEND=redis` and
+`REDIS_URL` in `.env`, then run with the `redis` profile:
 
 ```sh
 docker compose --profile redis up -d --build
 ```
 
-#### Лимиты ресурсов и healthcheck
+Pushing to `main` builds and publishes an image via GitHub Actions
+(`.github/workflows/docker-publish.yml`); a Watchtower service can poll
+the registry and redeploy automatically (see `docker-compose.yml`).
 
-У каждого сервиса в `docker-compose.yml` заданы `deploy.resources` (лимиты и
-резервы CPU/памяти — применяются и без Swarm, Compose v2 транслирует их
-напрямую в cgroup-лимиты контейнера) и `healthcheck`:
-
-| Сервис | CPU limit | Memory limit | Проверка здоровья |
-|---|---|---|---|
-| `bot` | 1.0 | 512M | файл `data/.heartbeat`, обновляемый фоновой задачей каждые 30с — не старше 90с |
-| `watchtower` | 0.25 | 128M | встроенный `watchtower --health-check` |
-| `redis` | 0.5 | 256M | `redis-cli ping`; `--maxmemory 200mb` держит heap ниже лимита контейнера, чтобы Redis сам вытеснял ключи, а не получал OOM-kill |
-
-У бота нет HTTP-сервера для проверки — вместо этого фоновая задача
-(`heartbeat.py`) периодически обновляет mtime файла, а healthcheck
-проверяет его свежесть — так Docker обнаруживает завис­ший event loop.
-
-**Известная проблема Watchtower:** образ `containrrr/watchtower` тянет старую
-версию Docker SDK, которая по умолчанию говорит с демоном по API-версии 1.25.
-Некоторые хосты это отклоняют:
-
-```
-Error response from daemon: client version 1.25 is too old.
-Minimum supported API version is 1.40
-```
-
-Контейнер при этом циклически перезапускается. Фикс — задать
-`DOCKER_API_VERSION` явно (уже сделано в `docker-compose.yml`, по умолчанию
-`1.41`); если у вас другая версия демона, узнайте её и переопределите в `.env`:
-
-```sh
-docker version --format '{{.Server.APIVersion}}'
-# в .env:
-DOCKER_API_VERSION=<результат выше>
-```
-
-и пересоздайте только этот контейнер:
-
-```sh
-docker compose up -d watchtower
-```
-
-**Известная проблема: логи пропадают после автообновления.** Если на хосте
-Docker-демон по умолчанию использует драйвер логирования `journald` (это
-частая настройка на systemd-based дистрибутивах), `docker logs`/`docker
-compose logs` могут переставать показывать вывод для контейнера бота именно
-после того, как Watchtower его пересоздаёт под тем же именем — сами данные
-при этом реально пишутся (это видно через `journalctl CONTAINER_ID_FULL=<id>`),
-но `docker logs` их не находит из-за гонки при подключении к новому потоку
-journald. У `json-file` такой гонки нет, поэтому во всех сервисах
-`docker-compose.yml` драйвер логирования зафиксирован явно:
-
-```yaml
-logging:
-  driver: json-file
-  options:
-    max-size: "10m"
-    max-file: "3"
-```
-
-После обновления до этой версии `docker-compose.yml` достаточно обычного
-`docker compose up -d` — Compose сам видит, что конфигурация сервиса
-изменилась (появился `logging:`), и пересоздаёт контейнер с новым драйвером.
-
-### GitOps: автодеплой из GitHub
-
-После пуша в `main` сервер сам подтягивает новую версию — без ручного захода
-на сервер. Схема:
-
-```
-git push (main) → GitHub Actions собирает и пушит образ в GHCR
-                → Watchtower на сервере видит новый digest и пересоздаёт контейнер
-```
-
-Компоненты:
-
-- **`.github/workflows/docker-publish.yml`** — при пуше в `main` (или вручную
-  через `workflow_dispatch`) собирает Docker-образ и пушит его в
-  `ghcr.io/<owner>/<repo>` с тегами `latest` и коротким SHA коммита.
-  Аутентификация — встроенный `secrets.GITHUB_TOKEN`, никаких своих секретов
-  заводить не нужно; правами на публикацию его наделяет
-  `permissions: packages: write` в самом workflow.
-- **Watchtower** — сервис-сосед бота в `docker-compose.yml`. Каждые 5 минут
-  проверяет реестр и, если у тега `latest` появился новый digest,
-  пересоздаёт контейнер бота. Помечен `com.centurylinklabs.watchtower.enable`,
-  поэтому не трогает другие контейнеры на том же хосте.
-- **`data/` и `logs/`** — volume, а не часть образа: коды, пользователи и
-  логи переживают пересоздание контейнера при каждом деплое.
-
-#### Настройка с нуля (в своём форке/репозитории)
-
-1. Запушить репозиторий на GitHub — workflow сработает автоматически при
-   первом пуше в `main` и опубликует образ в GHCR
-   (`ghcr.io/<owner>/<repo>`).
-2. Сделать пакет в GHCR публичным (Settings пакета → Danger Zone → Change
-   visibility → Public) — тогда серверу не нужны отдельные учётные данные для
-   `docker pull`. Пакет создаётся только после первого успешного запуска
-   workflow, и по умолчанию GHCR делает новые пакеты приватными независимо от
-   видимости самого репозитория.
-   - Если оставить пакет приватным — на сервере один раз потребуется
-     `docker login ghcr.io` с PAT (scope `read:packages`), см. ниже.
-3. В `docker-compose.yml` поле `image:` уже указывает на нужный путь в GHCR;
-   при необходимости поменяйте `<owner>/<repo>` под свой репозиторий.
-
-#### Первоначальная настройка сервера (один раз)
-
-```sh
-# на сервере
-mkdir -p /opt/proxy_bot/data /opt/proxy_bot/logs && cd /opt/proxy_bot
-scp user@local:/path/to/repo/docker-compose.yml .
-scp user@local:/path/to/repo/.env .   # содержит секреты — передавайте аккуратно, chmod 600
-
-# только если пакет в GHCR оставлен приватным:
-# echo <PAT> | docker login ghcr.io -u <github-username> --password-stdin
-
-docker compose pull   # тянет готовый образ из ghcr.io, без сборки и без исходников
-docker compose up -d
-```
-
-**Важно:** на сервере используйте `docker compose pull && docker compose up -d`,
-а не `up -d --build` — на сервере нет `Dockerfile`/исходников, только образ из
-реестра.
-
-После этого сервер больше не трогается руками — весь дальнейший цикл
-обновлений идёт через push → Actions → Watchtower. Деплой занимает до ~5 минут
-после завершения сборки — это интервал опроса Watchtower (`WATCHTOWER_POLL_INTERVAL`
-в `docker-compose.yml`), не баг.
-
-Ручной прогон без нового коммита: вкладка **Actions** на GitHub → выбрать
-workflow → **Run workflow**.
-
-## Структура проекта
+## Project structure
 
 ```
 src/proxy_bot/
-  storage/     TOML-репозитории: users, codes (много ссылок на код), admins
-  fsm/         FSM/dialog-состояние aiogram: SQLiteStorage (dev), RedisStorage (prod)
-  dialogs/     aiogram-dialog сценарии (меню пользователя, админ-панель)
-  handlers/    команды /start /help /link /code, fallback на неизвестные сообщения
+  storage/     TOML-backed repositories: users, codes, admins
+  fsm/         aiogram dialog-state backends (SQLite, Redis)
+  dialogs/     aiogram-dialog flows: user menu, admin panel
+  handlers/    /start /help /link /code, fallback handling
   filters/     IsAdmin
-  utils/       i18n (Fluent, эмодзи-шорткоды, watch_locales), html.esc(), форматирование ссылок
-  config.py, logging_config.py, commands.py, heartbeat.py, main.py
-locales/ru, locales/en     .ftl-файлы
-data/, logs/                состояние во время выполнения (не в git, создать вручную)
+  utils/       i18n, HTML escaping, link formatting
+locales/       ru, en translations (.ftl)
+data/, logs/   runtime state, not in git
 ```
+
+## License
+
+[MIT](LICENSE)
