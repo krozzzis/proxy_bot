@@ -80,6 +80,7 @@ links_dialog = Dialog(
                             items="link_items",
                             sep="\n\n",
                         ),
+                        I18N("link-help-hint"),
                         sep="\n\n",
                     ),
                     False: I18N("link-none"),

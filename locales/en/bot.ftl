@@ -34,6 +34,7 @@ link-item =
     Code: <code>{ $code }</code>
 
     { $links }
+link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 
 help-text =
