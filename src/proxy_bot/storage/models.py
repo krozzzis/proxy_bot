@@ -28,6 +28,13 @@ class User:
     # this user; shared across all remnawave-enabled codes they hold.
     remnawave_uuid: str | None = None
     remnawave_subscription_url: str | None = None
+    remnawave_username: str | None = None
+    # True if an admin force-linked this account via the "Link Remnawave"
+    # flow (dialogs/admin/link_remnawave.py); False if it was provisioned or
+    # matched automatically (services/remnawave_sync.py). Absent/False for
+    # anyone linked before this field existed - their account was in fact
+    # auto-provisioned back then, so the default isn't a guess.
+    remnawave_linked_manually: bool = False
     # Explicit language choice from the settings menu. Empty means "not
     # chosen yet" - falls back to the bot's default_locale.
     locale: str = ""

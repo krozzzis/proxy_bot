@@ -108,7 +108,7 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
     if target_user is None:
         target_user = await storage.users.get_or_create(user_id, username=None, full_name="")
 
-    await storage.users.set_remnawave_account(user_id, uuid, subscription_url)
+    await storage.users.set_remnawave_account(user_id, uuid, subscription_url, found_username, manual=True)
     remnawave = manager.middleware_data.get("remnawave")
     await sync_remnawave_access(storage, remnawave, user_id)
 

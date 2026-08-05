@@ -137,6 +137,12 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "not_banned": not user.banned,
         "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
         "remnawave_linked": bool(user.remnawave_uuid),
+        "remnawave_username": esc(user.remnawave_username) if user.remnawave_username else "—",
+        # Fed into `admin-user-remnawave-linked`'s `$source` var below, same
+        # reason as banned_label above - a nested arg value, not window text.
+        "remnawave_link_source": i18n.get(
+            "admin-user-remnawave-link-source-manual" if user.remnawave_linked_manually else "admin-user-remnawave-link-source-auto"
+        ),
     }
 
 
@@ -227,7 +233,12 @@ users_dialog = Dialog(
                 True: Multi(
                     I18N("admin-user-detail-title", banned="{banned_label}"),
                     I18N("admin-user-codes-none", when="no_codes"),
-                    I18N("admin-user-remnawave-linked", when="remnawave_linked"),
+                    I18N(
+                        "admin-user-remnawave-linked",
+                        username="{remnawave_username}",
+                        source="{remnawave_link_source}",
+                        when="remnawave_linked",
+                    ),
                     sep="\n\n",
                 ),
                 False: I18N("admin-users-empty"),

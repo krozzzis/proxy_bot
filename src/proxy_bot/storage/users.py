@@ -130,8 +130,20 @@ class UserRepo:
 
         return await self._file.update(mutate)
 
-    async def set_remnawave_account(self, user_id: int, uuid: str | None, subscription_url: str | None) -> bool:
-        """Link (or unlink, if `uuid` is None) this user's Remnawave account."""
+    async def set_remnawave_account(
+        self,
+        user_id: int,
+        uuid: str | None,
+        subscription_url: str | None,
+        username: str | None = None,
+        *,
+        manual: bool = False,
+    ) -> bool:
+        """Link (or unlink, if `uuid` is None) this user's Remnawave account.
+        `manual` distinguishes an admin's explicit "Link Remnawave" pick
+        (dialogs/admin/link_remnawave.py) from an automatic
+        provision/match (services/remnawave_sync.py) - shown on the admin
+        user-detail page so an admin can tell the two apart."""
 
         def mutate(data: dict) -> bool:
             users = data.get("users", {})
@@ -140,6 +152,8 @@ class UserRepo:
                 return False
             users[key]["remnawave_uuid"] = uuid or ""
             users[key]["remnawave_subscription_url"] = subscription_url or ""
+            users[key]["remnawave_username"] = username or ""
+            users[key]["remnawave_linked_manually"] = manual
             return True
 
         return await self._file.update(mutate)

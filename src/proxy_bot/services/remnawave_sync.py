@@ -56,7 +56,7 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | N
             rw_user = await _create_account(remnawave, db_user, squad_list)
         else:
             await remnawave.update_user_squads(rw_user.uuid, squad_list)
-        await storage.users.set_remnawave_account(user_id, rw_user.uuid, rw_user.subscription_url)
+        await storage.users.set_remnawave_account(user_id, rw_user.uuid, rw_user.subscription_url, rw_user.username, manual=False)
     except RemnawaveError:
         logger.warning(
             "Remnawave sync failed for %s", actor_id(user_id, db_user.username), exc_info=True
