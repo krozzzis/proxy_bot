@@ -39,10 +39,14 @@ code-already-added = { $emoji_white_check_mark } Этот код уже доба
 code-accepted = { $emoji_white_check_mark } <b>Код принят!</b>
 code-prompt-again = Введите новый код доступа.
 
-link-header = { $emoji_key } <b>Ваши подписки</b>
-link-item =
-    { $emoji_small_blue_diamond } <b>{ $description }</b>
-    Код: <code>{ $code }</code>
+link-header =
+    { $emoji_key } <b>Ваши подписки</b>
+
+    Выберите подписку:
+link-detail-header =
+    <b>{ $code }</b>
+
+    <blockquote>{ $emoji_format_quote } { $description } { $emoji_format_quote }</blockquote>
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.
 link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
 

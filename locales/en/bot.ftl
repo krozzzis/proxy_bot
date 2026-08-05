@@ -39,10 +39,14 @@ code-already-added = { $emoji_white_check_mark } This code is already linked to 
 code-accepted = { $emoji_white_check_mark } <b>Code accepted!</b>
 code-prompt-again = Enter another access code.
 
-link-header = { $emoji_key } <b>Your subscriptions</b>
-link-item =
-    { $emoji_small_blue_diamond } <b>{ $description }</b>
-    Code: <code>{ $code }</code>
+link-header =
+    { $emoji_key } <b>Your subscriptions</b>
+
+    Choose a subscription:
+link-detail-header =
+    <b>{ $code }</b>
+
+    <blockquote>{ $emoji_format_quote } { $description } { $emoji_format_quote }</blockquote>
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 

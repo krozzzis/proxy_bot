@@ -91,6 +91,7 @@ ICONS: dict[str, str] = {
     "chevron_left": "chevron_left",
     "chevron_right": "chevron_right",
     "clipboard": "assignment",
+    "format_quote": "format_quote",
     "gear": "settings",
     "heavy_plus_sign": "add",
     "infinity": "all_inclusive",
@@ -111,8 +112,8 @@ ICONS: dict[str, str] = {
     "x": "close",
 }
 
-# chevron_left/right/language/check aren't real :shortcode: emoji aliases
-# (the `emoji` package has none), and Telegram's
+# chevron_left/right/language/check/format_quote aren't real :shortcode:
+# emoji aliases (the `emoji` package has none), and Telegram's
 # createStickerSet/replaceSticker rejects an item whose "emoji" field isn't
 # an actual emoji character - so these need an explicit fallback instead of
 # being emojized from their own name.
@@ -131,6 +132,7 @@ FALLBACK_OVERRIDES = {
     "chevron_right": "▶️",
     "language": "🌐",
     "check": "✔️",
+    "format_quote": "💬",
 }
 
 # Plain white, no per-category color: a colored icon on a same-colored

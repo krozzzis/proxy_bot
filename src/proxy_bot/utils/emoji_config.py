@@ -29,6 +29,7 @@ FALLBACK_OVERRIDES: dict[str, str] = {
     "chevron_right": "▶️",
     "language": "🌐",
     "check": "✔️",
+    "format_quote": "💬",
 }
 
 
