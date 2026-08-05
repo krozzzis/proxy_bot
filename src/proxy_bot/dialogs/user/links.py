@@ -26,8 +26,12 @@ class Links(StatesGroup):
 # point sending a user to a list of one) and Links.detail (reached via a
 # button when there are several) - both getters below produce the same
 # top-level keys (code/description/expiry/traffic/links), so this same
-# widget renders either way without knowing which state it's in.
+# widget renders either way without knowing which state it's in. Includes
+# its own "Ваши подписки" title (link-header) rather than relying on an
+# outer wrapper to supply it, since Links.detail is a separate Window with
+# no such wrapper of its own.
 _DETAIL_CONTENT = Multi(
+    I18N("link-header"),
     I18N("link-detail-header", code="{code}", description="{description}"),
     Format("{expiry}"),
     Format("{traffic}"),
@@ -136,7 +140,7 @@ links_dialog = Dialog(
             Case(
                 {
                     True: _DETAIL_CONTENT,
-                    False: I18N("link-header"),
+                    False: Multi(I18N("link-header"), I18N("link-choose-prompt"), sep="\n\n"),
                 },
                 selector="single",
                 when="has_links",
