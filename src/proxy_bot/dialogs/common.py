@@ -28,6 +28,12 @@ def not_a_command(message: Message) -> bool:
 # reach button icons.
 CUSTOM_EMOJI = {name: custom_emoji_id(value) for name, value in load_emoji_config(get_locales_dir() / "emoji.toml").items()}
 
+# The reverse of CUSTOM_EMOJI (id -> shortcode instead of shortcode -> id) -
+# every custom-emoji id the bot itself recognizes, for utils.emoji_config's
+# collapse_tags() to recognize the bot's own icons inside arbitrary rendered
+# HTML (see dialogs/admin/broadcast.py's title preview).
+CUSTOM_EMOJI_BY_ID = {emoji_id: name for name, emoji_id in CUSTOM_EMOJI.items() if emoji_id is not None}
+
 
 def icon(name: str, color: ButtonStyle | None = None, when: WhenCondition = None) -> Style:
     """Button style carrying a pack icon and, for confirm/cancel-type actions

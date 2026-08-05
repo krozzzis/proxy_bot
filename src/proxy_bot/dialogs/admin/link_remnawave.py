@@ -144,7 +144,7 @@ link_remnawave_dialog = Dialog(
             style=icon("white_check_mark", ButtonStyle.SUCCESS),
         ),
         SwitchTo(
-            I18N("admin-btn-cancel"), id="back_to_username", state=LinkRemnawave.enter_username, style=_CANCEL_STYLE
+            I18N("admin-btn-back"), id="back_to_username", state=LinkRemnawave.enter_username, style=icon("arrow_backward")
         ),
         state=LinkRemnawave.confirm,
         getter=confirm_getter,

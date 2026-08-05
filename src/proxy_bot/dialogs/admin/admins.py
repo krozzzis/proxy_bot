@@ -75,9 +75,6 @@ async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     }
 
 
-_CANCEL_STYLE = icon("x", ButtonStyle.DANGER)
-
-
 async def _grant_admin(user_id: int, manager: DialogManager) -> None:
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
@@ -227,20 +224,20 @@ admins_dialog = Dialog(
             on_click=open_enter_username,
             style=icon("bust_in_silhouette"),
         ),
-        SwitchTo(I18N("admin-btn-cancel"), id="back_to_list_from_method", state=AdminAdmins.list, style=icon("x", ButtonStyle.DANGER)),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_list_from_method", state=AdminAdmins.list, style=icon("arrow_backward")),
         state=AdminAdmins.choose_method,
     ),
     build_field_window(
         ID_FIELD,
         AdminAdmins.enter_id,
         on_id_done,
-        SwitchTo(I18N("admin-btn-cancel"), id="back_to_method_from_id", state=AdminAdmins.choose_method, style=_CANCEL_STYLE),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_method_from_id", state=AdminAdmins.choose_method, style=icon("arrow_backward")),
     ),
     build_field_window(
         USERNAME_FIELD,
         AdminAdmins.enter_username,
         on_username_done,
-        SwitchTo(I18N("admin-btn-cancel"), id="back_to_method_from_username", state=AdminAdmins.choose_method, style=_CANCEL_STYLE),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_method_from_username", state=AdminAdmins.choose_method, style=icon("arrow_backward")),
     ),
     on_start=on_dialog_start,
 )

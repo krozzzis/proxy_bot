@@ -197,10 +197,10 @@ add_user_dialog = Dialog(
             style=icon("shield"),
         ),
         SwitchTo(
-            I18N("admin-btn-cancel"),
+            I18N("admin-btn-back"),
             id="back_to_identifier",
             state=AdminAddUser.enter_identifier,
-            style=icon("x", ButtonStyle.DANGER),
+            style=icon("arrow_backward"),
         ),
         state=AdminAddUser.choose_subscriptions,
         getter=choose_subscriptions_getter,

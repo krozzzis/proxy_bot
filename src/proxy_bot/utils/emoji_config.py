@@ -98,3 +98,37 @@ def expand_tags(text: str) -> str:
         return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
     return _EMBEDDED_TAG_RE.sub(_sub, text)
+
+
+_TAG_HTML_RE = re.compile(r'<tg-emoji emoji-id="(\d+)">.*?</tg-emoji>')
+
+
+def collapse_tags(text: str, registry: dict[str, str]) -> str:
+    """A display-only cousin of expand_tags(), for the opposite direction:
+    replace every real `<tg-emoji emoji-id="...">` entity in `text` whose id
+    is a key in `registry` (id -> shortcode, e.g. dialogs.common.CUSTOM_EMOJI
+    inverted) with a plain "[shortcode]" label - so an admin previewing raw
+    HTML they're about to send (a <code> block, say) sees a name instead of
+    a wall of numeric ids. An id `registry` doesn't recognize - someone
+    else's custom emoji, forwarded content, a different pack entirely - has
+    no shortcode to show, so it's left as the real tag rather than guessed
+    at.
+
+    Deliberately NOT the "[tg_emoji:<id>:<shortcode>]" marker syntax
+    expand_tags() reads: this output is meant to be inert past this point,
+    but a value on its way into an I18N-rendered message (e.g. interpolated
+    as a Fluent variable) still passes through EmojiFluentCompileCore.get(),
+    which runs expand_tags() (and emoji.emojize()) over its *entire* result
+    - including already-substituted variables - so a real marker written
+    here would just get expanded straight back into a live tag one step
+    later, undoing the whole point of collapsing it.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        emoji_id = match.group(1)
+        shortcode = registry.get(emoji_id)
+        if shortcode is None:
+            return match.group(0)
+        return f"[{shortcode}]"
+
+    return _TAG_HTML_RE.sub(_sub, text)

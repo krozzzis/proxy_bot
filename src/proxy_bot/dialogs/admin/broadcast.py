@@ -17,9 +17,10 @@ from pydantic import TypeAdapter
 
 from proxy_bot.storage import Storage, User
 from proxy_bot.utils.audit import actor, actor_id
+from proxy_bot.utils.emoji_config import collapse_tags, expand_tags
 from proxy_bot.utils.html import esc
 
-from ..common import icon, not_a_command
+from ..common import CUSTOM_EMOJI_BY_ID, icon, not_a_command
 from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
@@ -99,15 +100,20 @@ async def on_code_chosen(_callback: CallbackQuery, _select, manager: DialogManag
 
 
 async def on_content_entered(message: Message, _widget: MessageInput, manager: DialogManager) -> None:
+    # expand_tags() lets an admin type/paste the "[tg_emoji:id:name]" marker
+    # syntax by hand (what collapse_tags shows them in a preview) and have
+    # it become a real, sendable tag - see forms.py's on_rich_input, which
+    # does the same for the title field.
     manager.dialog_data["content_type"] = message.content_type
     if message.content_type == ContentType.TEXT:
-        manager.dialog_data["body_html"] = message.html_text
+        manager.dialog_data["body_html"] = expand_tags(message.html_text)
         manager.dialog_data.pop("source_chat_id", None)
         manager.dialog_data.pop("source_message_id", None)
     else:
         manager.dialog_data["source_chat_id"] = message.chat.id
         manager.dialog_data["source_message_id"] = message.message_id
-        manager.dialog_data["caption_html"] = message.html_text if message.content_type in _CAPTION_CAPABLE else ""
+        caption = message.html_text if message.content_type in _CAPTION_CAPABLE else ""
+        manager.dialog_data["caption_html"] = expand_tags(caption)
         manager.dialog_data.pop("body_html", None)
     await manager.switch_to(AdminBroadcast.confirm)
 
@@ -169,7 +175,11 @@ async def open_edit_title(_callback: CallbackQuery, _button: Button, manager: Di
 
 async def _title_extra_getter(manager: DialogManager) -> dict:
     i18n = manager.middleware_data["i18n"]
-    return {"current_title": esc(_effective_prefix(manager.dialog_data, i18n))}
+    current = _effective_prefix(manager.dialog_data, i18n)
+    # collapse_tags() turns the bot's own recognized custom-emoji tags back
+    # into "[tg_emoji:id:name]" markers so the mono preview reads as
+    # something legible rather than a wall of numeric-id HTML.
+    return {"current_title": esc(collapse_tags(current, CUSTOM_EMOJI_BY_ID))}
 
 
 async def on_title_done(title_html: str, manager: DialogManager) -> None:
@@ -341,7 +351,7 @@ broadcast_dialog = Dialog(
         _TITLE_FIELD,
         AdminBroadcast.edit_title,
         on_title_done,
-        SwitchTo(I18N("admin-btn-cancel"), id="back_to_confirm_from_title", state=AdminBroadcast.confirm, style=_CANCEL_STYLE),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_confirm_from_title", state=AdminBroadcast.confirm, style=icon("arrow_backward")),
     ),
     Window(
         I18N("admin-broadcast-confirm"),

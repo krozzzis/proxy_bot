@@ -13,6 +13,8 @@ from aiogram_dialog.widgets.kbd import Button
 from aiogram_dialog.widgets.text import Multi
 from pydantic import TypeAdapter, ValidationError
 
+from proxy_bot.utils.emoji_config import expand_tags
+
 from .common import icon, not_a_command
 from .widgets import I18N
 
@@ -108,7 +110,13 @@ def build_field_window(
         await _validate(raw.strip(), manager)
 
     async def on_rich_input(message: Message, widget: MessageInput, manager: DialogManager) -> None:
-        await _validate(message.html_text, manager)
+        # A rich field's whole point is round-tripping Telegram entities as
+        # HTML, but an admin may also type/paste the "[tg_emoji:id:name]"
+        # marker syntax by hand (it's what a previewed value looks like -
+        # see collapse_tags) - expand it to a real tag now, so every later
+        # consumer of this value (a confirm preview, the actual send) can
+        # treat it as plain already-real HTML without checking for markers.
+        await _validate(expand_tags(message.html_text), manager)
 
     async def on_skip(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
         manager.dialog_data.pop(error_key, None)
