@@ -17,6 +17,10 @@ services:
       # or "redis" (start with --profile redis, see REDIS_URL below).
       FSM_BACKEND: ${FSM_BACKEND:-sqlite}
       REDIS_URL: ${REDIS_URL:-}
+      # Optional: enables Remnawave panel sync (squad membership on code
+      # grant/revoke). Leave unset to disable the integration entirely.
+      REMNAWAVE_API_URL: ${REMNAWAVE_API_URL:-}
+      REMNAWAVE_API_TOKEN: ${REMNAWAVE_API_TOKEN:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
