@@ -43,7 +43,8 @@ async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     # account shared across every code that grants squads on it, not a
     # per-code resource.
     remnawave = dialog_manager.middleware_data.get("remnawave")
-    subscription_info = await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n)
+    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
+    subscription_info = await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n, show_traffic=show_traffic)
 
     link_items = []
     for code in db_user.codes:

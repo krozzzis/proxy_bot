@@ -119,7 +119,8 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
     name = display_name(user.username, user.full_name, user.user_id)
     codes = [{"id": code, "code": code} for code in user.codes]
     remnawave = dialog_manager.middleware_data.get("remnawave")
-    subscription_info = await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n)
+    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
+    subscription_info = await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n, show_traffic=show_traffic)
     return {
         "found": True,
         "name": esc(name),

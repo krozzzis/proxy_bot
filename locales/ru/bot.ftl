@@ -46,8 +46,8 @@ link-item =
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.
 link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
 
-sub-expiry-normal = { $emoji_calendar } Активно до: { $date }
-sub-expiry-eternal = { $emoji_calendar } Активно до: неограниченно { $emoji_infinity }
+sub-expiry-normal = Активно до: { $date }
+sub-expiry-eternal = Активно до: неограниченно { $emoji_infinity }
 sub-traffic-normal = { $used } / { $limit } ГБ
 sub-traffic-unlimited = { $used } ГБ / { $emoji_infinity }
 

@@ -21,6 +21,9 @@ services:
       # grant/revoke). Leave unset to disable the integration entirely.
       REMNAWAVE_API_URL: ${REMNAWAVE_API_URL:-}
       REMNAWAVE_API_TOKEN: ${REMNAWAVE_API_TOKEN:-}
+      # Off by default - traffic usage is a coarser, more sensitive number
+      # than "does this account still have access".
+      SHOW_TRAFFIC_USAGE: ${SHOW_TRAFFIC_USAGE:-false}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

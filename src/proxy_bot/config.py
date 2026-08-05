@@ -23,6 +23,11 @@ class Config:
     redis_url: str | None
     remnawave_api_url: str | None
     remnawave_api_token: str | None
+    # Off by default: traffic usage is a coarser, more sensitive number than
+    # "does this account still have access" - operators who don't want it
+    # shown (to users or admins) can leave this unset rather than the bot
+    # deciding for them.
+    show_traffic_usage: bool
 
 
 def _require_env(name: str) -> str:
@@ -30,6 +35,13 @@ def _require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"Environment variable {name} is required but not set")
     return value
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def get_locales_dir() -> Path:
@@ -58,4 +70,5 @@ def load_config() -> Config:
         redis_url=os.environ.get("REDIS_URL"),
         remnawave_api_url=os.environ.get("REMNAWAVE_API_URL"),
         remnawave_api_token=os.environ.get("REMNAWAVE_API_TOKEN"),
+        show_traffic_usage=_bool_env("SHOW_TRAFFIC_USAGE"),
     )

@@ -46,8 +46,8 @@ link-item =
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 
-sub-expiry-normal = { $emoji_calendar } Active until: { $date }
-sub-expiry-eternal = { $emoji_calendar } Active until: unlimited { $emoji_infinity }
+sub-expiry-normal = Active until: { $date }
+sub-expiry-eternal = Active until: unlimited { $emoji_infinity }
 sub-traffic-normal = { $used } / { $limit } GB
 sub-traffic-unlimited = { $used } GB / { $emoji_infinity }
 

@@ -34,21 +34,29 @@ def format_gb(num_bytes: int) -> str:
     return f"{num_bytes / (1024**3):.2f}"
 
 
-async def fetch_subscription_lines(remnawave: RemnawaveClient | None, uuid: str | None, i18n: Any) -> dict[str, str] | None:
-    """Two fully-rendered lines - expiry and traffic - for a linked
-    account, fetched live (traffic/expiry aren't cached locally -
-    storage.User only keeps the uuid). Shared by the user-facing "my
-    subscriptions" screen (dialogs/user/links.py) and the admin
-    user-detail page (dialogs/admin/users.py) so the two can't drift
-    apart, and rendered here (not left as raw values for the caller's own
-    Fluent template) so both label wording and the eternal/unlimited
-    branching live in exactly one place: locales/*/bot.ftl's sub-expiry-*
-    and sub-traffic-* keys.
+async def fetch_subscription_lines(
+    remnawave: RemnawaveClient | None, uuid: str | None, i18n: Any, *, show_traffic: bool = False
+) -> dict[str, str] | None:
+    """Fully-rendered lines for a linked account, fetched live
+    (expiry/traffic aren't cached locally - storage.User only keeps the
+    uuid). Shared by the user-facing "my subscriptions" screen
+    (dialogs/user/links.py) and the admin user-detail page
+    (dialogs/admin/users.py) so the two can't drift apart, and rendered
+    here (not left as raw values for the caller's own Fluent template) so
+    both label wording and the eternal/unlimited branching live in exactly
+    one place: locales/*/bot.ftl's sub-expiry-* and sub-traffic-* keys.
 
-    None if there's nothing to show: no Remnawave configured, no account
-    linked, or the account turned out not to exist (usually a stale link -
-    deleted on the panel since, or by retire_auto_provisioned_account) or
-    a panel error.
+    `show_traffic` gates the "traffic" line specifically (Config.
+    show_traffic_usage, off by default - see config.py) - traffic usage is
+    a coarser, more sensitive number than "does this account still have
+    access", so it's opt-in per deployment rather than always shown
+    alongside expiry. `traffic` comes back as "" when disabled, same as
+    when there's genuinely nothing to show.
+
+    None if there's nothing to show at all: no Remnawave configured, no
+    account linked, or the account turned out not to exist (usually a
+    stale link - deleted on the panel since, or by
+    retire_auto_provisioned_account) or a panel error.
     """
     if remnawave is None or not uuid:
         return None
@@ -71,10 +79,12 @@ async def fetch_subscription_lines(remnawave: RemnawaveClient | None, uuid: str 
         date_tag = f'<tg-time unix="{int(dt.timestamp())}">{dt.strftime("%d.%m.%Y")}</tg-time>'
         expiry = i18n.get("sub-expiry-normal", date=date_tag)
 
-    used = format_gb(rw_user.used_traffic_bytes)
-    if is_unlimited(rw_user.traffic_limit_bytes):
-        traffic = i18n.get("sub-traffic-unlimited", used=used)
-    else:
-        traffic = i18n.get("sub-traffic-normal", used=used, limit=format_gb(rw_user.traffic_limit_bytes))
+    traffic = ""
+    if show_traffic:
+        used = format_gb(rw_user.used_traffic_bytes)
+        if is_unlimited(rw_user.traffic_limit_bytes):
+            traffic = i18n.get("sub-traffic-unlimited", used=used)
+        else:
+            traffic = i18n.get("sub-traffic-normal", used=used, limit=format_gb(rw_user.traffic_limit_bytes))
 
     return {"expiry": expiry, "traffic": traffic}
