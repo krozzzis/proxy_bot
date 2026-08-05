@@ -14,6 +14,7 @@ from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
+from proxy_bot.utils.subscription_display import fetch_subscription_lines
 
 from ..common import icon
 from ..widgets import I18N
@@ -122,6 +123,8 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
 
     name = _display_name(user.username, user.full_name, user.user_id)
     codes = [{"id": code, "code": code} for code in user.codes]
+    remnawave = dialog_manager.middleware_data.get("remnawave")
+    subscription_info = await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n)
     return {
         "found": True,
         "name": esc(name),
@@ -143,6 +146,8 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "remnawave_link_source": i18n.get(
             "admin-user-remnawave-link-source-manual" if user.remnawave_linked_manually else "admin-user-remnawave-link-source-auto"
         ),
+        "has_subscription_info": subscription_info is not None,
+        **(subscription_info or {"expiry": "", "traffic": ""}),
     }
 
 
@@ -239,6 +244,7 @@ users_dialog = Dialog(
                         source="{remnawave_link_source}",
                         when="remnawave_linked",
                     ),
+                    I18N("sub-info", expiry="{expiry}", traffic="{traffic}", when="has_subscription_info"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-users-empty"),

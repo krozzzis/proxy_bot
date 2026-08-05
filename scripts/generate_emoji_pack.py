@@ -84,13 +84,16 @@ import tomli_w
 # as the fallback glyph for clients that can't render custom emoji.
 ICONS: dict[str, str] = {
     "arrow_backward": "arrow_back",
+    "bar_chart": "data_usage",
     "bust_in_silhouette": "person",
+    "calendar": "calendar_month",
     "check": "check",
     "chevron_left": "chevron_left",
     "chevron_right": "chevron_right",
     "clipboard": "assignment",
     "gear": "settings",
     "heavy_plus_sign": "add",
+    "infinity": "all_inclusive",
     "key": "vpn_key",
     "language": "translate",
     "leftwards_arrow_with_hook": "undo",

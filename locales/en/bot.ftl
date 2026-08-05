@@ -48,6 +48,11 @@ link-item =
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 
+sub-info =
+    { $expiry }
+    { $traffic }
+sub-unit-gb = GB
+
 help-text =
     <b>Available commands</b>
 

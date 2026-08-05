@@ -36,6 +36,14 @@ class RemnawaveUser:
     # and never connected), used to decide disable-vs-delete when an admin
     # force-links a different account over an auto-provisioned one.
     used_traffic_bytes: int = 0
+    # 0 means unlimited (DEFAULT_TRAFFIC_LIMIT_BYTES) - shown to users/admins
+    # as the account's traffic cap.
+    traffic_limit_bytes: int = 0
+    # ISO 8601 string, or None if the panel didn't send one. DEFAULT_EXPIRE_AT
+    # is this app's own "no real expiry" placeholder, but a manually linked
+    # account (dialogs/admin/link_remnawave.py) could carry a genuinely
+    # different value from whoever set it up outside the bot.
+    expire_at: str | None = None
 
 
 def _parse_user(raw: dict) -> RemnawaveUser:
@@ -46,6 +54,8 @@ def _parse_user(raw: dict) -> RemnawaveUser:
         subscription_url=raw.get("subscriptionUrl"),
         active_internal_squads=[s["uuid"] for s in raw.get("activeInternalSquads", [])],
         used_traffic_bytes=(raw.get("userTraffic") or {}).get("usedTrafficBytes", 0),
+        traffic_limit_bytes=raw.get("trafficLimitBytes", 0),
+        expire_at=raw.get("expireAt"),
     )
 
 
@@ -80,6 +90,15 @@ class RemnawaveClient:
         data = await self._request("GET", f"/api/users/by-telegram-id/{telegram_id}")
         users = data["response"]
         return _parse_user(users[0]) if users else None
+
+    async def get_user_by_uuid(self, uuid: str) -> RemnawaveUser | None:
+        try:
+            data = await self._request("GET", f"/api/users/{uuid}")
+        except RemnawaveError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return _parse_user(data["response"])
 
     async def get_user_by_username(self, username: str) -> RemnawaveUser | None:
         try:

@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.text import Case, List, Multi
 from proxy_bot.storage import Storage
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.subscription_display import fetch_subscription_lines
 
 from ..common import icon
 from ..widgets import I18N
@@ -33,7 +34,7 @@ async def on_enter_code_result(_start_data: object, result: object, manager: Dia
         manager.dialog_data["banner"] = result["banner"]
 
 
-async def links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     user = dialog_manager.middleware_data["event_from_user"]
     db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
@@ -54,10 +55,15 @@ async def links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
             }
         )
 
+    remnawave = dialog_manager.middleware_data.get("remnawave")
+    subscription_info = await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n)
+
     return {
         "banner": dialog_manager.dialog_data.pop("banner", None),
         "has_links": bool(link_items),
         "link_items": link_items,
+        "has_subscription_info": subscription_info is not None,
+        **(subscription_info or {"expiry": "", "traffic": ""}),
     }
 
 
@@ -73,6 +79,7 @@ links_dialog = Dialog(
                 {
                     True: Multi(
                         I18N("link-header"),
+                        I18N("sub-info", expiry="{expiry}", traffic="{traffic}", when="has_subscription_info"),
                         List(
                             I18N(
                                 "link-item",
