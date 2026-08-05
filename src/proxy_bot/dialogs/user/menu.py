@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.text import Case
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon
 from ..widgets import I18N
@@ -86,7 +87,7 @@ async def open_admin_panel(callback, _button: Button, manager: DialogManager) ->
     user = manager.middleware_data["event_from_user"]
     if not await storage.admins.is_admin(user.id):
         logger.warning("%s tried to open the admin panel via a stale button", actor(user))
-        await callback.answer(manager.middleware_data["i18n"].get("admin-only"), show_alert=True)
+        await callback.answer(popup_text(manager.middleware_data["i18n"], "admin-only"), show_alert=True)
         return
 
     # Imported here, not at module level: dialogs.admin.menu imports

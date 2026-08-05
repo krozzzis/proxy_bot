@@ -31,6 +31,11 @@ class RemnawaveUser:
     telegram_id: int | None
     subscription_url: str | None
     active_internal_squads: list[str] = field(default_factory=list)
+    # Lifetime traffic, from the panel's own counter - the simplest signal
+    # for "has this account ever actually been used" (vs. just provisioned
+    # and never connected), used to decide disable-vs-delete when an admin
+    # force-links a different account over an auto-provisioned one.
+    used_traffic_bytes: int = 0
 
 
 def _parse_user(raw: dict) -> RemnawaveUser:
@@ -40,6 +45,7 @@ def _parse_user(raw: dict) -> RemnawaveUser:
         telegram_id=raw.get("telegramId"),
         subscription_url=raw.get("subscriptionUrl"),
         active_internal_squads=[s["uuid"] for s in raw.get("activeInternalSquads", [])],
+        used_traffic_bytes=(raw.get("userTraffic") or {}).get("usedTrafficBytes", 0),
     )
 
 
@@ -111,3 +117,10 @@ class RemnawaveClient:
     async def update_user_squads(self, uuid: str, squads: list[str]) -> RemnawaveUser:
         data = await self._request("PATCH", "/api/users", json={"uuid": uuid, "activeInternalSquads": squads})
         return _parse_user(data["response"])
+
+    async def disable_user(self, uuid: str) -> RemnawaveUser:
+        data = await self._request("PATCH", "/api/users", json={"uuid": uuid, "status": "DISABLED"})
+        return _parse_user(data["response"])
+
+    async def delete_user(self, uuid: str) -> None:
+        await self._request("DELETE", f"/api/users/{uuid}")

@@ -3,17 +3,17 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import emoji
 import watchfiles
 from aiogram.types import User as TelegramUser
-from aiogram_i18n import I18nMiddleware
+from aiogram_i18n import I18nContext, I18nMiddleware
 from aiogram_i18n.cores import FluentCompileCore
 from aiogram_i18n.managers.base import BaseManager
 
 from proxy_bot.storage import Storage
-from proxy_bot.utils.emoji_config import fallback_for, load_emoji_config
+from proxy_bot.utils.emoji_config import fallback_for, load_emoji_config, plain_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +57,13 @@ class EmojiFluentCompileCore(FluentCompileCore):
         super().__init__(*args, **kwargs)
         self._emoji_config_path = emoji_config_path
         self._emoji_vars: dict[str, str] = {}
+        self._emoji_vars_plain: dict[str, str] = {}
         self._reload_emoji_vars()
 
     def _reload_emoji_vars(self) -> None:
-        self._emoji_vars = {f"emoji_{name}": value for name, value in load_emoji_config(self._emoji_config_path).items()}
+        config = load_emoji_config(self._emoji_config_path)
+        self._emoji_vars = {f"emoji_{name}": value for name, value in config.items()}
+        self._emoji_vars_plain = {f"emoji_{name}": plain_emoji(value) for name, value in config.items()}
 
     async def startup(self) -> None:
         # Picked up by watch_locales' hot-reload same as the .ftl files
@@ -71,6 +74,24 @@ class EmojiFluentCompileCore(FluentCompileCore):
     def get(self, message: str, locale: str | None = None, /, **kwargs: Any) -> str:
         text = super().get(message, locale, **{**self._emoji_vars, **kwargs})
         text = _expand_premium_emoji(text)
+        return emoji.emojize(text, language="alias")
+
+    def get_plain(self, message: str, locale: str | None = None, /, **kwargs: Any) -> str:
+        """Like get(), but every `{ $emoji_x }` resolves to its plain
+        fallback character instead of a <tg-emoji> tag - for contexts that
+        can't render HTML/custom emoji at all, unlike a message body.
+        Telegram callback-query popups (`answerCallbackQuery`'s `text`) are
+        the one in this bot: it's plain, unparsed text, so a `<tg-emoji>`
+        tag would show up as literal angle-bracket text instead of an icon.
+        See popup_text() below for the call-site-facing wrapper.
+
+        No _expand_premium_emoji pass here: emoji vars are already plain,
+        and a literal "[tg_emoji:...]" pasted directly into a popup-only
+        .ftl value (rather than reached through a variable) would be a
+        message-author mistake - left unexpanded so it's visibly wrong
+        instead of silently working differently than get_plain promises.
+        """
+        text = super().get(message, locale, **{**self._emoji_vars_plain, **kwargs})
         return emoji.emojize(text, language="alias")
 
 
@@ -95,6 +116,20 @@ class PersistentLocaleManager(BaseManager):
     async def set_locale(self, locale: str, event_from_user: TelegramUser | None = None, **kwargs: object) -> None:
         if event_from_user is not None:
             await self._storage.users.set_locale(event_from_user.id, locale)
+
+
+def popup_text(i18n: I18nContext, message: str, **kwargs: Any) -> str:
+    """Render a message for a Telegram callback-query popup
+    (`callback.answer(popup_text(...), show_alert=...)`) instead of a
+    message body - routes through EmojiFluentCompileCore.get_plain() so any
+    `{ $emoji_x }` in the message renders as a plain character rather than
+    a <tg-emoji> tag popups can't display. Use this instead of `i18n.get()`
+    at every `callback.answer(...)` call site, even ones whose message
+    doesn't currently reference an emoji - a later edit to that .ftl key
+    that adds one should render correctly for free, not require noticing
+    which call sites feed a popup."""
+    core = cast(EmojiFluentCompileCore, i18n.core)
+    return core.get_plain(message, i18n.locale, **kwargs)
 
 
 def build_i18n_middleware(locales_dir: Path, default_locale: str, storage: Storage) -> I18nMiddleware:

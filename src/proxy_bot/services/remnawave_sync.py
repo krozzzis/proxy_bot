@@ -61,3 +61,44 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | N
         logger.warning(
             "Remnawave sync failed for %s", actor_id(user_id, db_user.username), exc_info=True
         )
+
+
+async def retire_auto_provisioned_account(
+    remnawave: RemnawaveClient | None, db_user: User, keep_uuid: str
+) -> str | None:
+    """Clean up the account this user would have gotten from `_create_account`
+    (the `tg_<telegram_username>` naming convention) once an admin force-links
+    a *different* Remnawave account to them - without this, they end up with
+    two live accounts and two subscription URLs, only one of which the bot
+    now points at.
+
+    Disables rather than deletes an account that's actually been used
+    (`used_traffic_bytes > 0`) - discarding real traffic history isn't this
+    bot's call to make, only which account is the active one. Deletes one
+    that was provisioned and never connected, since there's nothing there to
+    lose. Returns "disabled", "deleted", or None if there was nothing to do
+    (no Telegram username to derive the auto account's name from, no such
+    account on the panel, or it turned out to already be the account being
+    kept).
+    """
+    if remnawave is None or not db_user.username:
+        return None
+
+    auto_username = f"tg_{db_user.username}"
+    try:
+        auto_user = await remnawave.get_user_by_username(auto_username)
+        if auto_user is None or auto_user.uuid == keep_uuid:
+            return None
+        if auto_user.used_traffic_bytes > 0:
+            await remnawave.disable_user(auto_user.uuid)
+            return "disabled"
+        await remnawave.delete_user(auto_user.uuid)
+        return "deleted"
+    except RemnawaveError:
+        logger.warning(
+            "Failed to retire auto-provisioned Remnawave account %r for %s",
+            auto_username,
+            actor_id(db_user.user_id, db_user.username),
+            exc_info=True,
+        )
+        return None

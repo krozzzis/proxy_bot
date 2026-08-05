@@ -59,7 +59,7 @@ settings_dialog = Dialog(
     Window(
         I18N("settings-title"),
         Button(I18N("settings-btn-language"), id="open_language", on_click=open_language, style=icon("language")),
-        Cancel(I18N("menu-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Settings.main,
     ),
     Window(
@@ -73,7 +73,7 @@ settings_dialog = Dialog(
             on_click=on_language_selected,
             checked_style=icon("check"),
         ),
-        SwitchTo(I18N("menu-btn-back"), id="back_to_settings", state=Settings.main, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("menu-btn-back"), id="back_to_settings", state=Settings.main, style=icon("arrow_backward")),
         state=Settings.language,
         getter=language_getter,
     ),

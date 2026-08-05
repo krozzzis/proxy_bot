@@ -16,6 +16,7 @@ from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
@@ -152,7 +153,7 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
     link = code.links[index]
     await storage.codes.remove_link(code_id, link)
     logger.info("%s removed a link from code %r", actor(admin), code_id)
-    await callback.answer(i18n.get("admin-code-link-removed"))
+    await callback.answer(popup_text(i18n, "admin-code-link-removed"))
 
 
 async def open_add_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -285,7 +286,7 @@ async def on_squads_saved(callback: CallbackQuery, _button: Button, manager: Dia
     squads = multiselect.get_checked() if multiselect is not None else []
     await storage.codes.set_remnawave_squads(code_id, squads)
     logger.info("%s set Remnawave squads of code %r to %s", actor(admin), code_id, squads)
-    await callback.answer(i18n.get("admin-code-squads-updated"))
+    await callback.answer(popup_text(i18n, "admin-code-squads-updated"))
     await manager.switch_to(AdminCodes.detail)
 
 
@@ -309,7 +310,7 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
             await storage.users.remove_code(holder.user_id, code_id)
             await sync_remnawave_access(storage, remnawave, holder.user_id)
         logger.info("%s deleted code %r", actor(admin), code_id)
-        await callback.answer(i18n.get("admin-code-deleted", code=code_id), show_alert=True)
+        await callback.answer(popup_text(i18n, "admin-code-deleted", code=code_id), show_alert=True)
     await manager.switch_to(AdminCodes.list)
 
 
@@ -341,7 +342,7 @@ codes_dialog = Dialog(
             Button(I18N("admin-btn-prev"), id="prev_page", on_click=on_prev_page, style=icon("chevron_left")),
             Button(I18N("admin-btn-next"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
         ),
-        Cancel(I18N("admin-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminCodes.list,
         getter=codes_list_getter,
     ),
@@ -403,26 +404,26 @@ codes_dialog = Dialog(
             when="found",
             style=icon("wastebasket", ButtonStyle.DANGER),
         ),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_list", state=AdminCodes.list, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_list", state=AdminCodes.list, style=icon("arrow_backward")),
         state=AdminCodes.detail,
         getter=codes_detail_getter,
     ),
     Window(
         I18N("admin-code-add-link-prompt"),
         TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.enter_link,
     ),
     Window(
         I18N("admin-code-edit-description-prompt"),
         TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail2", state=AdminCodes.detail, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.edit_description,
     ),
     Window(
         I18N("admin-code-edit-name-prompt"),
         TextInput(id="edit_code_input", on_success=on_code_renamed, filter=not_a_command),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail4", state=AdminCodes.detail, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail4", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.edit_code,
     ),
     Window(
@@ -445,7 +446,7 @@ codes_dialog = Dialog(
             ),
         ),
         Button(I18N("admin-btn-done"), id="squads_saved", on_click=on_squads_saved, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail3", state=AdminCodes.detail, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail3", state=AdminCodes.detail, style=icon("arrow_backward")),
         state=AdminCodes.edit_squads,
         getter=edit_squads_getter,
     ),

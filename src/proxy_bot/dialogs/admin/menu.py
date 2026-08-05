@@ -65,7 +65,7 @@ admin_menu_dialog = Dialog(
             Button(I18N("admin-btn-broadcast"), id="broadcast", on_click=open_broadcast, style=icon("loudspeaker")),
             width=2,
         ),
-        Button(I18N("admin-btn-close"), id="close", on_click=close_menu, style=icon("leftwards_arrow_with_hook")),
+        Button(I18N("admin-btn-close"), id="close", on_click=close_menu, style=icon("arrow_backward")),
         state=AdminMenu.main,
     ),
     on_start=on_dialog_start,

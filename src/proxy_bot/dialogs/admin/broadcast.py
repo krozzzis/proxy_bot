@@ -141,14 +141,14 @@ broadcast_dialog = Dialog(
             on_click=on_code_chosen,
             style=icon("package"),
         ),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_target", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
         state=AdminBroadcast.choose_code,
         getter=choose_code_getter,
     ),
     Window(
         I18N("admin-broadcast-prompt-text"),
         TextInput(id="broadcast_text", on_success=on_text_entered, filter=not_a_command),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("leftwards_arrow_with_hook")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_target2", state=AdminBroadcast.choose_target, style=icon("arrow_backward")),
         state=AdminBroadcast.enter_text,
     ),
     Window(

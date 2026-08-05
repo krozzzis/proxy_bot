@@ -11,10 +11,11 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Multi
 
 from proxy_bot.remnawave import RemnawaveError
-from proxy_bot.services.remnawave_sync import sync_remnawave_access
+from proxy_bot.services.remnawave_sync import retire_auto_provisioned_account, sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
@@ -113,7 +114,12 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
 
     target = actor_id(user_id, target_user.username)
     logger.info("%s linked Remnawave account %r to %s", actor(admin), found_username, target)
-    await callback.answer(i18n.get("admin-link-remnawave-done", id=str(user_id)), show_alert=True)
+
+    retired = await retire_auto_provisioned_account(remnawave, target_user, keep_uuid=uuid)
+    if retired is not None:
+        logger.info("%s retired (%s) auto-provisioned Remnawave account for %s", actor(admin), retired, target)
+
+    await callback.answer(popup_text(i18n, "admin-link-remnawave-done", id=str(user_id)), show_alert=True)
     await manager.done()
 
 

@@ -13,6 +13,7 @@ from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon
 from ..widgets import I18N
@@ -156,7 +157,7 @@ async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManage
         target_user = await storage.users.get(user_id)
         target = actor_id(user_id, target_user.username if target_user else None)
         logger.info("%s revoked code %r from %s", actor(admin), item_id, target)
-        await callback.answer(i18n.get("admin-user-revoke-done", code=item_id, id=str(user_id)), show_alert=True)
+        await callback.answer(popup_text(i18n, "admin-user-revoke-done", code=item_id, id=str(user_id)), show_alert=True)
 
 
 async def back_to_list(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -183,7 +184,7 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
     # state with no real security benefit. Refuse the ban transition for a
     # fellow admin instead; unbanning is always allowed.
     if new_state and await storage.admins.is_admin(user_id):
-        await callback.answer(i18n.get("admin-user-ban-admin-denied"), show_alert=True)
+        await callback.answer(popup_text(i18n, "admin-user-ban-admin-denied"), show_alert=True)
         return
     await storage.users.set_banned(user_id, new_state)
     target = actor_id(user_id, user.username)
@@ -216,7 +217,7 @@ users_dialog = Dialog(
             Button(I18N("admin-btn-next"), id="next_page", on_click=on_next_page, style=icon("chevron_right")),
         ),
         Button(I18N("admin-btn-add-user"), id="add_user", on_click=open_add_user, style=icon("heavy_plus_sign")),
-        Cancel(I18N("admin-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminUsers.list,
         getter=users_list_getter,
     ),
@@ -257,7 +258,7 @@ users_dialog = Dialog(
             when="remnawave_available",
             style=icon("shield"),
         ),
-        Button(I18N("admin-btn-back"), id="back_to_list", on_click=back_to_list, style=icon("leftwards_arrow_with_hook")),
+        Button(I18N("admin-btn-back"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
         state=AdminUsers.detail,
         getter=users_detail_getter,
     ),

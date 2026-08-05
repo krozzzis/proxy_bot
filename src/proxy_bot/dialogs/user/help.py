@@ -22,7 +22,7 @@ async def help_getter(storage: Storage, event_from_user, **kwargs) -> dict:
 help_dialog = Dialog(
     Window(
         Multi(I18N("help-text"), I18N("help-admin-suffix", when="is_admin"), sep="\n\n"),
-        Cancel(I18N("menu-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Help.main,
         getter=help_getter,
     ),

@@ -11,7 +11,7 @@ import emoji as emoji_lib
 # `language = "🌐"` instead of a pack-backed custom emoji - both forms are
 # valid message-text values, but only a tag carries an id an inline-keyboard
 # button can use (see custom_emoji_id below).
-_TAG_RE = re.compile(r"^\[tg_emoji:(\d+):[a-z0-9_+\-]+\]$")
+_TAG_RE = re.compile(r"^\[tg_emoji:(\d+):([a-z0-9_+\-]+)\]$")
 
 # Shortcodes that aren't real `emoji` package aliases, so `fallback_for`
 # can't derive a fallback character from the name alone - needed here for
@@ -56,3 +56,17 @@ def custom_emoji_id(value: str) -> str | None:
     to no icon in that case rather than erroring."""
     match = _TAG_RE.match(value)
     return match.group(1) if match else None
+
+
+def plain_emoji(value: str) -> str:
+    """The literal Unicode character(s) this config value should render as
+    when custom emoji can't be shown at all - not just "no id", but nowhere
+    to put one, e.g. Telegram callback-query popups (answerCallbackQuery's
+    `text` is plain, unparsed - a pasted `<tg-emoji ...>` tag would show up
+    as literal angle-bracket text instead of being rendered). A
+    "[tg_emoji:...]" tag resolves to its own fallback character; a literal
+    override is already plain and passes through unchanged."""
+    match = _TAG_RE.match(value)
+    if match is None:
+        return value
+    return fallback_for(match.group(2))

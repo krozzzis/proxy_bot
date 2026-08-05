@@ -2,17 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from proxy_bot.config import get_locales_dir
+from proxy_bot.utils.emoji_config import load_emoji_config
+
 from .html import esc
 
-
-# The pack's "link" icon (scripts/generate_emoji_pack.py: ICONS["link"]),
-# kept as a literal here since that's how every other [tg_emoji:...] marker
-# in this codebase is embedded (each ftl string repeats its own ids rather
-# than sharing a constant). EmojiFluentCompileCore.get() expands these
-# markers in the fully-assembled message text regardless of whether they
-# came from the .ftl file or, as here, from a value substituted into one of
-# its placeholders.
-_BULLET = "[tg_emoji:5425048503829179049:link]"
+# The pack's "link" icon, read from locales/emoji.toml like everything else
+# that needs one - NOT hardcoded, unlike an earlier version of this file
+# that pinned the tag's id as a literal. That id went stale the first time
+# the pack was regenerated (every id rotates on --recreate) since nothing
+# here would pick up the new one, and broke every "my subscriptions" render
+# for any user with a link until caught in production. EmojiFluentCompileCore
+# .get() expands this marker in the fully-assembled message text regardless
+# of whether it came from the .ftl file or, as here, from a value
+# substituted into one of its placeholders - read once at import time, same
+# as dialogs/common.py's CUSTOM_EMOJI (a process restart is needed to pick
+# up a regenerated pack either way).
+_BULLET = load_emoji_config(get_locales_dir() / "emoji.toml").get("link", "🔗")
 
 
 def format_links(links: Sequence[str]) -> str:

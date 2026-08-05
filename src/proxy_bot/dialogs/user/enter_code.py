@@ -65,7 +65,7 @@ enter_code_dialog = Dialog(
             on_success=on_code_entered,
             filter=not_a_command,
         ),
-        Cancel(I18N("menu-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=EnterCode.main,
         getter=enter_code_getter,
     ),

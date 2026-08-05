@@ -14,6 +14,7 @@ from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
@@ -149,7 +150,7 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
 
     target = actor_id(user_id, target_user.username if target_user else None)
     logger.info("%s manually added user %s with subscriptions %s", actor(admin), target, codes)
-    await callback.answer(i18n.get("admin-add-user-done", id=str(user_id), count=len(codes)), show_alert=True)
+    await callback.answer(popup_text(i18n, "admin-add-user-done", id=str(user_id), count=len(codes)), show_alert=True)
     await manager.done()
 
 

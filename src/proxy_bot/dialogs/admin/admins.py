@@ -14,6 +14,7 @@ from proxy_bot.commands import set_admin_commands
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
+from proxy_bot.utils.i18n import popup_text
 
 from ..common import icon, not_a_command
 from ..widgets import I18N
@@ -167,7 +168,7 @@ async def on_admin_removed(callback: CallbackQuery, _select, manager: DialogMana
     target_user = await storage.users.get(target_id)
     target = actor_id(target_id, target_user.username if target_user else None)
     logger.info("%s revoked admin rights from %s", actor(admin), target)
-    await callback.answer(i18n.get("admin-remove-admin-done", id=str(target_id)), show_alert=True)
+    await callback.answer(popup_text(i18n, "admin-remove-admin-done", id=str(target_id)), show_alert=True)
 
 
 admins_dialog = Dialog(
@@ -194,7 +195,7 @@ admins_dialog = Dialog(
             when="is_super_admin",
             style=icon("heavy_plus_sign"),
         ),
-        Cancel(I18N("admin-btn-back"), style=icon("leftwards_arrow_with_hook")),
+        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
         state=AdminAdmins.list,
         getter=admins_list_getter,
     ),
