@@ -9,6 +9,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Multi
 
+from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
@@ -17,6 +18,7 @@ from ..common import icon
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .add_user import AdminAddUser
+from .link_remnawave import LinkRemnawave
 
 
 async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
@@ -93,6 +95,14 @@ async def open_add_user(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.start(AdminAddUser.enter_identifier)
 
 
+async def open_link_remnawave(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    user_id = manager.dialog_data.get("selected_user_id")
+    await manager.start(LinkRemnawave.enter_username, data={"user_id": user_id})
+
+
 async def on_prev_page(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     manager.dialog_data["page"] = max(0, manager.dialog_data.get("page", 0) - 1)
 
@@ -124,6 +134,8 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "codes": codes,
         "banned": user.banned,
         "not_banned": not user.banned,
+        "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
+        "remnawave_linked": bool(user.remnawave_uuid),
     }
 
 
@@ -139,6 +151,8 @@ async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManage
 
     removed = await storage.users.remove_code(user_id, item_id)
     if removed:
+        remnawave = manager.middleware_data.get("remnawave")
+        await sync_remnawave_access(storage, remnawave, user_id)
         target_user = await storage.users.get(user_id)
         target = actor_id(user_id, target_user.username if target_user else None)
         logger.info("%s revoked code %r from %s", actor(admin), item_id, target)
@@ -212,6 +226,7 @@ users_dialog = Dialog(
                 True: Multi(
                     I18N("admin-user-detail-title", banned="{banned_label}"),
                     I18N("admin-user-codes-none", when="no_codes"),
+                    I18N("admin-user-remnawave-linked", when="remnawave_linked"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-users-empty"),
@@ -234,6 +249,13 @@ users_dialog = Dialog(
             on_click=on_toggle_ban,
             when="found",
             style=_BAN_TOGGLE_STYLE,
+        ),
+        Button(
+            I18N("admin-btn-link-remnawave"),
+            id="link_remnawave",
+            on_click=open_link_remnawave,
+            when="remnawave_available",
+            style=icon("shield"),
         ),
         Button(I18N("admin-btn-back"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
         state=AdminUsers.detail,

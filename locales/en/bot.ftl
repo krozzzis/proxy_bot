@@ -86,6 +86,9 @@ admin-create-code-exists = This code already exists. Enter another one.
 admin-create-code-prompt-link = Send a link. You can add several — this message reappears after each one.
 admin-create-code-links-added = Links added: { $count }
 admin-create-code-prompt-description = Enter a description for the subscription:
+admin-create-code-prompt-squads = Choose the Remnawave squads to grant on activation of this code (optional, can be skipped):
+admin-create-code-squads-empty = Remnawave squads aren't available — the code will be created with fixed links only.
+admin-create-code-squad-item = { $name }
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Code "{ $code }" created.
 
 admin-page-indicator = · { $page }/{ $total }
@@ -107,6 +110,10 @@ admin-code-link-added = [tg_emoji:5425143379656744388:white_check_mark] Link add
 admin-code-edit-description-prompt = Send a new description (or "-" to clear it).
 admin-code-description-updated = [tg_emoji:5425143379656744388:white_check_mark] Description updated.
 admin-code-deleted = Code "{ $code }" and all its links have been deleted.
+admin-code-squads-count = Remnawave squads: { $count }
+admin-btn-edit-squads = Remnawave squads
+admin-code-edit-squads-prompt = Choose the Remnawave squads for this code:
+admin-code-squads-updated = [tg_emoji:5425143379656744388:white_check_mark] Squads updated.
 
 admin-users-title = [tg_emoji:5424728356966933997:bust_in_silhouette] <b>Users</b> ({ $count })
 admin-users-empty = There are no users yet.
@@ -122,6 +129,16 @@ admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = Ban user
 admin-user-unban-btn = Unban user
 admin-user-ban-admin-denied = Can't ban an administrator. Revoke their admin rights first, in the Administrators section.
+admin-user-remnawave-linked = Remnawave account linked.
+admin-btn-link-remnawave = Link Remnawave
+admin-link-remnawave-prompt = Enter the Remnawave username to link to id { $id }:
+admin-link-remnawave-not-found = No Remnawave user with that username was found.
+admin-link-remnawave-lookup-failed = Couldn't reach Remnawave. Please try again.
+admin-link-remnawave-confirm =
+    Link Remnawave account "{ $username }" to user id { $id }?
+
+    { $url }
+admin-link-remnawave-done = [tg_emoji:5425143379656744388:white_check_mark] Remnawave account linked to user { $id }.
 
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Administrators</b> ({ $count })
 admin-admins-item = { $name } (id { $id })

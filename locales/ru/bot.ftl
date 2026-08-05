@@ -86,6 +86,9 @@ admin-create-code-exists = Такой код уже существует. Вве
 admin-create-code-prompt-link = Отправьте ссылку. Можно добавить несколько — после каждой это сообщение появится снова.
 admin-create-code-links-added = Добавлено ссылок: { $count }
 admin-create-code-prompt-description = Введите описание подписки:
+admin-create-code-prompt-squads = Выберите сквады Remnawave, которые получит пользователь при активации этого кода (можно пропустить):
+admin-create-code-squads-empty = Сквады Remnawave недоступны — код будет создан только с фиксированными ссылками.
+admin-create-code-squad-item = { $name }
 admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Код «{ $code }» создан.
 
 admin-page-indicator = · { $page }/{ $total }
@@ -107,6 +110,10 @@ admin-code-link-added = [tg_emoji:5425143379656744388:white_check_mark] Ссыл
 admin-code-edit-description-prompt = Отправьте новое описание (или «-», чтобы очистить).
 admin-code-description-updated = [tg_emoji:5425143379656744388:white_check_mark] Описание обновлено.
 admin-code-deleted = Код «{ $code }» и все его ссылки удалены.
+admin-code-squads-count = Remnawave-сквадов: { $count }
+admin-btn-edit-squads = Remnawave-сквады
+admin-code-edit-squads-prompt = Выберите сквады Remnawave для этого кода:
+admin-code-squads-updated = [tg_emoji:5425143379656744388:white_check_mark] Сквады обновлены.
 
 admin-users-title = [tg_emoji:5424728356966933997:bust_in_silhouette] <b>Пользователи</b> ({ $count })
 admin-users-empty = Пока нет ни одного пользователя.
@@ -122,6 +129,16 @@ admin-user-revoke-done = Код «{ $code }» отобран у пользова
 admin-user-ban-btn = Забанить пользователя
 admin-user-unban-btn = Разбанить пользователя
 admin-user-ban-admin-denied = Нельзя забанить администратора. Сначала снимите права в разделе «Администраторы».
+admin-user-remnawave-linked = Remnawave-аккаунт привязан.
+admin-btn-link-remnawave = Привязать Remnawave
+admin-link-remnawave-prompt = Введите Remnawave-username пользователя, которого нужно привязать к id { $id }:
+admin-link-remnawave-not-found = Пользователь с таким username не найден в Remnawave.
+admin-link-remnawave-lookup-failed = Не удалось обратиться к Remnawave. Попробуйте ещё раз.
+admin-link-remnawave-confirm =
+    Привязать Remnawave-аккаунт «{ $username }» к пользователю id { $id }?
+
+    { $url }
+admin-link-remnawave-done = [tg_emoji:5425143379656744388:white_check_mark] Remnawave-аккаунт привязан к пользователю { $id }.
 
 admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b> ({ $count })
 admin-admins-item = { $name } (id { $id })

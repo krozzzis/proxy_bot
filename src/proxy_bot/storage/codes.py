@@ -29,7 +29,14 @@ class CodeRepo:
         data = await self._file.read()
         return [Code(code=key, **raw) for key, raw in data.get("codes", {}).items()]
 
-    async def create(self, code: str, links: list[str], description: str, created_by: int) -> Code | None:
+    async def create(
+        self,
+        code: str,
+        links: list[str],
+        description: str,
+        created_by: int,
+        remnawave_squads: list[str] | None = None,
+    ) -> Code | None:
         """Create a new code. Returns None if the code already exists."""
 
         def mutate(data: dict) -> Code | None:
@@ -42,6 +49,7 @@ class CodeRepo:
                 "created_by": created_by,
                 "created_at": _now(),
                 "active": True,
+                "remnawave_squads": list(remnawave_squads or []),
             }
             return Code(code=code, **codes[code])
 
@@ -86,6 +94,16 @@ class CodeRepo:
             if code not in codes:
                 return False
             codes[code]["description"] = description
+            return True
+
+        return await self._file.update(mutate)
+
+    async def set_remnawave_squads(self, code: str, squads: list[str]) -> bool:
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if code not in codes:
+                return False
+            codes[code]["remnawave_squads"] = list(squads)
             return True
 
         return await self._file.update(mutate)

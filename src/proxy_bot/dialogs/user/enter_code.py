@@ -34,9 +34,10 @@ async def on_code_entered(
     code_text: str,
 ) -> None:
     storage: Storage = dialog_manager.middleware_data["storage"]
+    remnawave = dialog_manager.middleware_data.get("remnawave")
     user = message.from_user
 
-    status, _code_record = await activate_code(storage, user, code_text)
+    status, _code_record = await activate_code(storage, remnawave, user, code_text)
     if status in ("banned", "invalid"):
         dialog_manager.dialog_data["error"] = status
         return

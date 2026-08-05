@@ -43,11 +43,14 @@ async def links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
         code_record = await storage.codes.get(code)
         if code_record is None:
             continue
+        links = list(code_record.links)
+        if code_record.remnawave_squads and db_user.remnawave_subscription_url:
+            links.append(db_user.remnawave_subscription_url)
         link_items.append(
             {
                 "description": esc(code_record.description or code_record.code),
                 "code": esc(code_record.code),
-                "links": format_links(code_record.links),
+                "links": format_links(links),
             }
         )
 

@@ -10,6 +10,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect, Swit
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Multi
 
+from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
@@ -17,6 +18,7 @@ from proxy_bot.utils.html import esc
 from ..common import icon, not_a_command
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
+from .link_remnawave import LinkRemnawave
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +109,16 @@ async def choose_subscriptions_getter(dialog_manager: DialogManager, **kwargs) -
         "name": esc(name),
         "has_codes": bool(codes),
         "codes": items,
+        "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
     }
+
+
+async def open_link_remnawave(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    user_id = manager.dialog_data.get("target_user_id")
+    await manager.start(LinkRemnawave.enter_username, data={"user_id": user_id})
 
 
 async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -132,6 +143,9 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
     codes = multiselect.get_checked()
     for code in codes:
         await storage.users.add_code(user_id, code)
+    if codes:
+        remnawave = manager.middleware_data.get("remnawave")
+        await sync_remnawave_access(storage, remnawave, user_id)
 
     target = actor_id(user_id, target_user.username if target_user else None)
     logger.info("%s manually added user %s with subscriptions %s", actor(admin), target, codes)
@@ -167,6 +181,13 @@ add_user_dialog = Dialog(
             ),
         ),
         Button(I18N("admin-btn-done"), id="confirm_subs", on_click=on_confirm, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
+        Button(
+            I18N("admin-btn-link-remnawave"),
+            id="link_remnawave",
+            on_click=open_link_remnawave,
+            when="remnawave_available",
+            style=icon("shield"),
+        ),
         SwitchTo(
             I18N("admin-btn-cancel"),
             id="back_to_identifier",

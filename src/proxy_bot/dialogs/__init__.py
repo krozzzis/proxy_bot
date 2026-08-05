@@ -7,6 +7,7 @@ from .admin import (
     broadcast_dialog,
     codes_dialog,
     create_code_dialog,
+    link_remnawave_dialog,
     users_dialog,
 )
 from .user import enter_code_dialog, help_dialog, links_dialog, user_menu_dialog
@@ -24,4 +25,5 @@ router.include_routers(
     admins_dialog,
     broadcast_dialog,
     add_user_dialog,
+    link_remnawave_dialog,
 )

@@ -101,3 +101,17 @@ class UserRepo:
             return True
 
         return await self._file.update(mutate)
+
+    async def set_remnawave_account(self, user_id: int, uuid: str | None, subscription_url: str | None) -> bool:
+        """Link (or unlink, if `uuid` is None) this user's Remnawave account."""
+
+        def mutate(data: dict) -> bool:
+            users = data.get("users", {})
+            key = str(user_id)
+            if key not in users:
+                return False
+            users[key]["remnawave_uuid"] = uuid or ""
+            users[key]["remnawave_subscription_url"] = subscription_url or ""
+            return True
+
+        return await self._file.update(mutate)

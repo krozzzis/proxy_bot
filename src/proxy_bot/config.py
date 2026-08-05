@@ -21,6 +21,8 @@ class Config:
     fsm_backend: str
     fsm_sqlite_path: Path
     redis_url: str | None
+    remnawave_api_url: str | None
+    remnawave_api_token: str | None
 
 
 def _require_env(name: str) -> str:
@@ -43,4 +45,6 @@ def load_config() -> Config:
         fsm_backend=os.environ.get("FSM_BACKEND", "sqlite").lower(),
         fsm_sqlite_path=Path(os.environ.get("FSM_SQLITE_PATH", BASE_DIR / "data" / "fsm.sqlite3")),
         redis_url=os.environ.get("REDIS_URL"),
+        remnawave_api_url=os.environ.get("REMNAWAVE_API_URL"),
+        remnawave_api_token=os.environ.get("REMNAWAVE_API_TOKEN"),
     )
