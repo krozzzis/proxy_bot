@@ -43,15 +43,13 @@ link-header = { $emoji_key } <b>Ваши подписки</b>
 link-item =
     { $emoji_small_blue_diamond } <b>{ $description }</b>
     Код: <code>{ $code }</code>
-
-    { $links }
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.
 link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
 
-sub-info =
-    { $expiry }
-    { $traffic }
-sub-unit-gb = ГБ
+sub-expiry-normal = { $emoji_calendar } Активно до: { $date }
+sub-expiry-eternal = { $emoji_calendar } Активно до: неограниченно { $emoji_infinity }
+sub-traffic-normal = { $used }//{ $limit } ГБ
+sub-traffic-unlimited = { $used } ГБ//{ $emoji_infinity }
 
 help-text =
     <b>Доступные команды</b>

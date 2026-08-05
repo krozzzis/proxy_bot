@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Case, Multi
+from aiogram_dialog.widgets.text import Case, Format, Multi
 
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
@@ -141,7 +141,6 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "remnawave_link_source": i18n.get(
             "admin-user-remnawave-link-source-manual" if user.remnawave_linked_manually else "admin-user-remnawave-link-source-auto"
         ),
-        "has_subscription_info": subscription_info is not None,
         **(subscription_info or {"expiry": "", "traffic": ""}),
     }
 
@@ -239,7 +238,8 @@ users_dialog = Dialog(
                         source="{remnawave_link_source}",
                         when="remnawave_linked",
                     ),
-                    I18N("sub-info", expiry="{expiry}", traffic="{traffic}", when="has_subscription_info"),
+                    Format("{expiry}"),
+                    Format("{traffic}"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-users-empty"),

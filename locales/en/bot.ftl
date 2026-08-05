@@ -43,15 +43,13 @@ link-header = { $emoji_key } <b>Your subscriptions</b>
 link-item =
     { $emoji_small_blue_diamond } <b>{ $description }</b>
     Code: <code>{ $code }</code>
-
-    { $links }
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 
-sub-info =
-    { $expiry }
-    { $traffic }
-sub-unit-gb = GB
+sub-expiry-normal = { $emoji_calendar } Active until: { $date }
+sub-expiry-eternal = { $emoji_calendar } Active until: unlimited { $emoji_infinity }
+sub-traffic-normal = { $used }//{ $limit } GB
+sub-traffic-unlimited = { $used } GB//{ $emoji_infinity }
 
 help-text =
     <b>Available commands</b>

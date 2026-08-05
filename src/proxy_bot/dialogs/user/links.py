@@ -4,7 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Case, List, Multi
+from aiogram_dialog.widgets.text import Case, Format, List, Multi
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.formatting import format_links
@@ -39,12 +39,19 @@ async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     user = dialog_manager.middleware_data["event_from_user"]
     db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
 
+    # Fetched once per render, not per code below - it's one Remnawave
+    # account shared across every code that grants squads on it, not a
+    # per-code resource.
+    remnawave = dialog_manager.middleware_data.get("remnawave")
+    subscription_info = await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n)
+
     link_items = []
     for code in db_user.codes:
         code_record = await storage.codes.get(code)
         if code_record is None:
             continue
         links = list(code_record.links)
+        has_remnawave = bool(code_record.remnawave_squads) and subscription_info is not None
         if code_record.remnawave_squads and db_user.remnawave_subscription_url:
             links.append(db_user.remnawave_subscription_url)
         link_items.append(
@@ -52,18 +59,15 @@ async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
                 "description": esc(code_record.description or code_record.code),
                 "code": esc(code_record.code),
                 "links": format_links(links),
+                "expiry": subscription_info["expiry"] if has_remnawave else "",
+                "traffic": subscription_info["traffic"] if has_remnawave else "",
             }
         )
-
-    remnawave = dialog_manager.middleware_data.get("remnawave")
-    subscription_info = await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n)
 
     return {
         "banner": dialog_manager.dialog_data.pop("banner", None),
         "has_links": bool(link_items),
         "link_items": link_items,
-        "has_subscription_info": subscription_info is not None,
-        **(subscription_info or {"expiry": "", "traffic": ""}),
     }
 
 
@@ -79,13 +83,13 @@ links_dialog = Dialog(
                 {
                     True: Multi(
                         I18N("link-header"),
-                        I18N("sub-info", expiry="{expiry}", traffic="{traffic}", when="has_subscription_info"),
                         List(
-                            I18N(
-                                "link-item",
-                                description="{item[description]}",
-                                code="{item[code]}",
-                                links="{item[links]}",
+                            Multi(
+                                I18N("link-item", description="{item[description]}", code="{item[code]}"),
+                                Format("{item[expiry]}"),
+                                Format("{item[traffic]}"),
+                                Format("{item[links]}"),
+                                sep="\n\n",
                             ),
                             items="link_items",
                             sep="\n\n",
