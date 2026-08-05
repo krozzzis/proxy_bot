@@ -55,6 +55,19 @@ class CodeRepo:
 
         return await self._file.update(mutate)
 
+    async def rename(self, old_code: str, new_code: str) -> bool:
+        """Rename a code, keyed by its code string. Returns False if
+        `old_code` doesn't exist or `new_code` is already taken."""
+
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if old_code not in codes or new_code in codes:
+                return False
+            codes[new_code] = codes.pop(old_code)
+            return True
+
+        return await self._file.update(mutate)
+
     async def delete(self, code: str) -> bool:
         def mutate(data: dict) -> bool:
             codes = data.get("codes", {})

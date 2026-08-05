@@ -77,6 +77,23 @@ class UserRepo:
 
         return await self._file.update(mutate)
 
+    async def rename_code(self, old_code: str, new_code: str) -> None:
+        """Replace `old_code` with `new_code` in every user's code list.
+        Used when an admin renames a code, so existing holders keep access
+        under the new name instead of silently losing it."""
+
+        def mutate(data: dict) -> None:
+            for user in data.get("users", {}).values():
+                codes = user.get("codes", [])
+                if old_code not in codes:
+                    continue
+                if new_code in codes:
+                    codes.remove(old_code)
+                else:
+                    codes[codes.index(old_code)] = new_code
+
+        await self._file.update(mutate)
+
     async def set_banned(self, user_id: int, banned: bool) -> bool:
         def mutate(data: dict) -> bool:
             users = data.get("users", {})
@@ -98,6 +115,17 @@ class UserRepo:
             if code not in codes:
                 return False
             codes.remove(code)
+            return True
+
+        return await self._file.update(mutate)
+
+    async def set_locale(self, user_id: int, locale: str) -> bool:
+        def mutate(data: dict) -> bool:
+            users = data.get("users", {})
+            key = str(user_id)
+            if key not in users:
+                return False
+            users[key]["locale"] = locale
             return True
 
         return await self._file.update(mutate)

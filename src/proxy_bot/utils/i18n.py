@@ -7,9 +7,13 @@ from typing import Any
 
 import emoji
 import watchfiles
+from aiogram.types import User as TelegramUser
 from aiogram_i18n import I18nMiddleware
 from aiogram_i18n.cores import FluentCompileCore
-from aiogram_i18n.managers.memory import MemoryManager
+from aiogram_i18n.managers.base import BaseManager
+
+from proxy_bot.storage import Storage
+from proxy_bot.utils.emoji_config import fallback_for, load_emoji_config
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +31,7 @@ _PREMIUM_EMOJI_RE = re.compile(r"\[tg_emoji:(\d+):([a-z0-9_+\-]+)\]")
 def _expand_premium_emoji(text: str) -> str:
     def _sub(match: re.Match[str]) -> str:
         emoji_id, fallback_name = match.group(1), match.group(2)
-        fallback = emoji.emojize(f":{fallback_name}:", language="alias")
+        fallback = fallback_for(fallback_name)
         return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
     return _PREMIUM_EMOJI_RE.sub(_sub, text)
@@ -36,24 +40,70 @@ def _expand_premium_emoji(text: str) -> str:
 class EmojiFluentCompileCore(FluentCompileCore):
     """FluentCompileCore that expands emoji shortcodes in rendered messages.
 
-    Two forms are supported so .ftl files never need raw Unicode pasted in:
+    Three forms reach a rendered message, and only the first needs raw
+    Unicode pasted into a .ftl file directly:
     - ":wave:" - GitHub/Slack-style alias for a regular Unicode emoji.
     - "[tg_emoji:5368324170671202286:wave]" - a Telegram Premium/custom emoji
       by id, with a shortcode fallback for clients that can't render it.
+    - "{ $emoji_wave }" - a Fluent variable resolving to whatever
+      locales/emoji.toml's `wave` entry holds (a tag as above, or a literal
+      Unicode override) - see utils/emoji_config.py. Injected into every
+      `get()` call automatically, so message authors don't pass it
+      per-call, and every shortcode in emoji.toml is available even to
+      messages that don't otherwise take arguments.
     """
 
+    def __init__(self, *args: Any, emoji_config_path: Path, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._emoji_config_path = emoji_config_path
+        self._emoji_vars: dict[str, str] = {}
+        self._reload_emoji_vars()
+
+    def _reload_emoji_vars(self) -> None:
+        self._emoji_vars = {f"emoji_{name}": value for name, value in load_emoji_config(self._emoji_config_path).items()}
+
+    async def startup(self) -> None:
+        # Picked up by watch_locales' hot-reload same as the .ftl files
+        # themselves, since emoji.toml lives inside locales_dir too.
+        self._reload_emoji_vars()
+        await super().startup()
+
     def get(self, message: str, locale: str | None = None, /, **kwargs: Any) -> str:
-        text = super().get(message, locale, **kwargs)
+        text = super().get(message, locale, **{**self._emoji_vars, **kwargs})
         text = _expand_premium_emoji(text)
         return emoji.emojize(text, language="alias")
 
 
-def build_i18n_middleware(locales_dir: Path, default_locale: str) -> I18nMiddleware:
+class PersistentLocaleManager(BaseManager):
+    """Reads/writes the user's language choice from the same users.toml
+    row everything else about them lives in (see storage.users.User.locale),
+    instead of aiogram_i18n's own MemoryManager - which forgets every
+    choice on process restart since it only ever lives in a dict."""
+
+    def __init__(self, storage: Storage, default_locale: str | None = None) -> None:
+        super().__init__(default_locale=default_locale)
+        self._storage = storage
+
+    async def get_locale(self, event_from_user: TelegramUser | None = None, **kwargs: object) -> str:
+        if event_from_user is None:
+            return self.default_locale
+        user = await self._storage.users.get(event_from_user.id)
+        if user and user.locale:
+            return user.locale
+        return self.default_locale
+
+    async def set_locale(self, locale: str, event_from_user: TelegramUser | None = None, **kwargs: object) -> None:
+        if event_from_user is not None:
+            await self._storage.users.set_locale(event_from_user.id, locale)
+
+
+def build_i18n_middleware(locales_dir: Path, default_locale: str, storage: Storage) -> I18nMiddleware:
     core = EmojiFluentCompileCore(
         path=locales_dir / "{locale}",
         default_locale=default_locale,
+        emoji_config_path=locales_dir / "emoji.toml",
     )
-    manager = MemoryManager(default_locale=default_locale)
+    manager = PersistentLocaleManager(storage, default_locale=default_locale)
     return I18nMiddleware(core=core, manager=manager, default_locale=default_locale)
 
 

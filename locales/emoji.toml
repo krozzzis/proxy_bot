@@ -1,0 +1,40 @@
+# Custom-emoji definitions, shared by every locale's .ftl file (via Fluent
+# `{ $emoji_<name> }` variables, injected automatically - see
+# utils/i18n.py: EmojiFluentCompileCore) and by dialogs/common.py's
+# CUSTOM_EMOJI (inline-keyboard button icons).
+#
+# Each value is either a "[tg_emoji:<id>:<shortcode>]" tag minted by
+# scripts/generate_emoji_pack.py, or a literal Unicode emoji overriding the
+# pack entirely for that name (e.g. `language = "🌐"`) - a plain override
+# has no id, so a button using it (dialogs/common.py: icon(name)) falls
+# back to showing no icon rather than erroring; message text renders the
+# literal character either way.
+#
+# Regenerating the pack (uv run --group emoji-pack
+# scripts/generate_emoji_pack.py) rewrites this file directly - any entry
+# rewritten to a literal override here is preserved rather than clobbered
+# back to a tag.
+[emoji]
+arrow_backward = "[tg_emoji:5447619450322856534:arrow_backward]"
+bust_in_silhouette = "[tg_emoji:5447227895334345713:bust_in_silhouette]"
+check = "[tg_emoji:5447158200900039997:check]"
+chevron_left = "[tg_emoji:5449792914228032387:chevron_left]"
+chevron_right = "[tg_emoji:5447395085526278741:chevron_right]"
+clipboard = "[tg_emoji:5447529234534804179:clipboard]"
+gear = "[tg_emoji:5447528104958402142:gear]"
+heavy_plus_sign = "[tg_emoji:5449797685936693585:heavy_plus_sign]"
+key = "[tg_emoji:5447168079324816143:key]"
+language = "[tg_emoji:5447142245096533533:language]"
+leftwards_arrow_with_hook = "[tg_emoji:5449525698542744748:leftwards_arrow_with_hook]"
+link = "[tg_emoji:5447496244891000845:link]"
+loudspeaker = "[tg_emoji:5449783293501288185:loudspeaker]"
+no_entry_sign = "[tg_emoji:5449410073728165508:no_entry_sign]"
+package = "[tg_emoji:5449752077678978124:package]"
+pencil2 = "[tg_emoji:5447465080608303452:pencil2]"
+question = "[tg_emoji:5447409692710056258:question]"
+shield = "[tg_emoji:5447298375747676453:shield]"
+small_blue_diamond = "[tg_emoji:5447142614463719990:small_blue_diamond]"
+wastebasket = "[tg_emoji:5447203968071544697:wastebasket]"
+wave = "[tg_emoji:5449840442336131248:wave]"
+white_check_mark = "[tg_emoji:5447116217594719043:white_check_mark]"
+x = "[tg_emoji:5447287402106234477:x]"

@@ -28,6 +28,9 @@ class User:
     # this user; shared across all remnawave-enabled codes they hold.
     remnawave_uuid: str | None = None
     remnawave_subscription_url: str | None = None
+    # Explicit language choice from the settings menu. Empty means "not
+    # chosen yet" - falls back to the bot's default_locale.
+    locale: str = ""
 
 
 @dataclass

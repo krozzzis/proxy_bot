@@ -211,7 +211,7 @@ create_code_dialog = Dialog(
                 id=_SQUADS_SELECT_ID,
                 item_id_getter=lambda item: item["id"],
                 items="squads",
-                checked_style=icon("white_check_mark", ButtonStyle.SUCCESS),
+                checked_style=icon("check"),
                 unchecked_style=icon("shield"),
             ),
         ),

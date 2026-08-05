@@ -65,7 +65,7 @@ async def run() -> None:
     dp["remnawave"] = remnawave
     dp["dispatcher"] = dp
 
-    i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale)
+    i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale, storage)
     i18n_middleware.setup(dispatcher=dp)
 
     interaction_logger = InteractionLoggingMiddleware()

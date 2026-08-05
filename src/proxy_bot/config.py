@@ -32,6 +32,17 @@ def _require_env(name: str) -> str:
     return value
 
 
+def get_locales_dir() -> Path:
+    """Same resolution `load_config()` uses for `Config.locales_dir`, exposed
+    standalone for import-time consumers (dialogs/common.py's CUSTOM_EMOJI)
+    that need it before a full Config is loaded - and without load_config's
+    hard requirement on BOT_TOKEN/ROOT_ADMIN_ID being set. Loads .env itself
+    (idempotent) since dialogs is imported before main.py's own
+    load_config() call would otherwise do it."""
+    load_dotenv()
+    return Path(os.environ.get("LOCALES_DIR", BASE_DIR / "locales"))
+
+
 def load_config() -> Config:
     load_dotenv()
     return Config(
@@ -39,7 +50,7 @@ def load_config() -> Config:
         root_admin_id=int(_require_env("ROOT_ADMIN_ID")),
         data_dir=Path(os.environ.get("DATA_DIR", BASE_DIR / "data")),
         logs_dir=Path(os.environ.get("LOGS_DIR", BASE_DIR / "logs")),
-        locales_dir=Path(os.environ.get("LOCALES_DIR", BASE_DIR / "locales")),
+        locales_dir=get_locales_dir(),
         default_locale=os.environ.get("DEFAULT_LOCALE", "ru"),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
         fsm_backend=os.environ.get("FSM_BACKEND", "sqlite").lower(),

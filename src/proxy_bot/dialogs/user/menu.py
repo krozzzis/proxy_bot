@@ -18,6 +18,7 @@ from .activation import activate_code
 from .enter_code import EnterCode
 from .help import Help
 from .links import Links
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,10 @@ async def open_help(_callback, _button: Button, manager: DialogManager) -> None:
     await manager.start(Help.main)
 
 
+async def open_settings(_callback, _button: Button, manager: DialogManager) -> None:
+    await manager.start(Settings.main)
+
+
 async def open_admin_panel(callback, _button: Button, manager: DialogManager) -> None:
     # The button itself is only rendered when is_admin (see
     # main_menu_getter below), but that's a display condition, not an
@@ -96,7 +101,13 @@ async def main_menu_getter(
     dialog_manager: DialogManager, event_from_user, storage: Storage, **kwargs
 ) -> dict:
     db_user = await storage.users.get_or_create(event_from_user.id, event_from_user.username, event_from_user.full_name)
-    has_codes = bool(db_user.codes)
+    # Count only codes that still exist - db_user.codes can outlive a code
+    # that an admin later deleted (see links_getter in dialogs/user/links.py,
+    # which already skips those the same way when rendering the list
+    # itself), so this keeps the count honest even for stale records left
+    # over from before that cascade was in place.
+    live_codes = [code for code in db_user.codes if await storage.codes.exists(code)]
+    has_codes = bool(live_codes)
 
     # Shown once, right after a fresh /start - not on every return to this
     # window, so the greeting doesn't repeat every time the user navigates
@@ -105,7 +116,7 @@ async def main_menu_getter(
     return {
         "greeting": greeting,
         "name": esc(event_from_user.full_name),
-        "count": len(db_user.codes),
+        "count": len(live_codes),
         "has_codes": has_codes,
         "no_codes": not has_codes,
         "is_admin": await storage.admins.is_admin(event_from_user.id),
@@ -149,7 +160,8 @@ user_menu_dialog = Dialog(
             Button(I18N("menu-btn-help"), id="open_help", on_click=open_help, style=icon("question")),
             width=2,
         ),
-        Button(I18N("menu-btn-admin"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("gear")),
+        Button(I18N("menu-btn-settings"), id="open_settings", on_click=open_settings, style=icon("gear")),
+        Button(I18N("menu-btn-admin"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("shield")),
         state=UserMenu.main,
         getter=main_menu_getter,
     ),

@@ -194,7 +194,7 @@ admins_dialog = Dialog(
             when="is_super_admin",
             style=icon("heavy_plus_sign"),
         ),
-        Cancel(I18N("admin-btn-back"), style=icon("arrow_backward")),
+        Cancel(I18N("admin-btn-back"), style=icon("leftwards_arrow_with_hook")),
         state=AdminAdmins.list,
         getter=admins_list_getter,
     ),

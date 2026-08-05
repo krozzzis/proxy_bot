@@ -10,7 +10,7 @@ from .admin import (
     link_remnawave_dialog,
     users_dialog,
 )
-from .user import enter_code_dialog, help_dialog, links_dialog, user_menu_dialog
+from .user import enter_code_dialog, help_dialog, links_dialog, settings_dialog, user_menu_dialog
 
 router = Router(name="dialogs")
 router.include_routers(
@@ -18,6 +18,7 @@ router.include_routers(
     enter_code_dialog,
     links_dialog,
     help_dialog,
+    settings_dialog,
     admin_menu_dialog,
     create_code_dialog,
     codes_dialog,

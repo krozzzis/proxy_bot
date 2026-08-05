@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import re
+import tomllib
+from pathlib import Path
+
+import emoji as emoji_lib
+
+# A config entry is either a "[tg_emoji:<id>:<shortcode>]" tag (from
+# scripts/generate_emoji_pack.py) or a literal Unicode emoji override, e.g.
+# `language = "🌐"` instead of a pack-backed custom emoji - both forms are
+# valid message-text values, but only a tag carries an id an inline-keyboard
+# button can use (see custom_emoji_id below).
+_TAG_RE = re.compile(r"^\[tg_emoji:(\d+):[a-z0-9_+\-]+\]$")
+
+# Shortcodes that aren't real `emoji` package aliases, so `fallback_for`
+# can't derive a fallback character from the name alone - needed here for
+# utils/i18n.py's tag-expansion (the <tg-emoji> fallback shown to clients
+# that can't render custom emoji). scripts/generate_emoji_pack.py needs the
+# exact same table for the same reason (Telegram's
+# createStickerSet/replaceSticker also reject a non-real-emoji "emoji"
+# field) but keeps its own copy rather than importing this module - see
+# that script's FALLBACK_OVERRIDES for why. Keep both in sync: add to this
+# whenever a new shortcode in generate_emoji_pack.py:ICONS isn't a valid
+# `:shortcode:` alias, or a literal ":name:" string leaks into rendered
+# message text instead of a glyph.
+FALLBACK_OVERRIDES: dict[str, str] = {
+    "chevron_left": "◀️",
+    "chevron_right": "▶️",
+    "language": "🌐",
+    "check": "✔️",
+}
+
+
+def fallback_for(shortcode: str) -> str:
+    return FALLBACK_OVERRIDES.get(shortcode) or emoji_lib.emojize(f":{shortcode}:", language="alias")
+
+
+def load_emoji_config(path: Path) -> dict[str, str]:
+    """Read locales/emoji.toml's `[emoji]` table: shortcode -> tag or literal
+    emoji. Missing file reads as empty rather than erroring, matching how a
+    freshly checked-out repo with no pack generated yet should behave -
+    every message referencing `{ $emoji_x }` would then render an empty
+    string, same as any other unset Fluent variable."""
+    if not path.exists():
+        return {}
+    with path.open("rb") as fp:
+        return tomllib.load(fp).get("emoji", {})
+
+
+def custom_emoji_id(value: str) -> str | None:
+    """The numeric id inside a "[tg_emoji:<id>:<shortcode>]" tag, or None if
+    `value` is a literal Unicode override - inline-keyboard buttons can only
+    carry a real custom emoji id (Telegram's icon_custom_emoji_id field),
+    never a literal character, so callers building button styles fall back
+    to no icon in that case rather than erroring."""
+    match = _TAG_RE.match(value)
+    return match.group(1) if match else None

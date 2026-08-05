@@ -3,15 +3,15 @@
 start-prompt-code = Введите код доступа, который вам выдали.
 
 menu-title-greeting =
-    { "" }[tg_emoji:5422610611672490482:wave] Здравствуйте, { $name }!
+    { $emoji_wave } Здравствуйте, { $name }!
 
-    { "" }[tg_emoji:5425029979635229746:clipboard] <b>Личный кабинет</b>
+    { $emoji_clipboard } <b>Личный кабинет</b>
 
     Активных подписок: { $count }
 
     Выберите действие:
 menu-title =
-    { "" }[tg_emoji:5425029979635229746:clipboard] <b>Личный кабинет</b>
+    { $emoji_clipboard } <b>Личный кабинет</b>
 
     Активных подписок: { $count }
 
@@ -21,16 +21,27 @@ menu-btn-links = Мои подписки
 menu-btn-help = Помощь
 menu-btn-back = Назад
 menu-btn-admin = Админ-панель
+menu-btn-settings = Настройки
 
-code-invalid = [tg_emoji:5422801295335533381:x] Код не найден. Проверьте правильность ввода и попробуйте ещё раз.
-code-banned = [tg_emoji:5424811928440577113:no_entry_sign] Ваш аккаунт заблокирован администратором. Обратитесь в поддержку.
-code-already-added = [tg_emoji:5425143379656744388:white_check_mark] Этот код уже добавлен к вашему аккаунту.
-code-accepted = [tg_emoji:5425143379656744388:white_check_mark] <b>Код принят!</b>
+settings-title =
+    { $emoji_gear } <b>Настройки</b>
+
+    Выберите действие:
+settings-btn-language = Язык
+settings-language-title =
+    { $emoji_language } <b>Язык</b>
+
+    Выберите язык интерфейса:
+
+code-invalid = { $emoji_x } Код не найден. Проверьте правильность ввода и попробуйте ещё раз.
+code-banned = { $emoji_no_entry_sign } Ваш аккаунт заблокирован администратором. Обратитесь в поддержку.
+code-already-added = { $emoji_white_check_mark } Этот код уже добавлен к вашему аккаунту.
+code-accepted = { $emoji_white_check_mark } <b>Код принят!</b>
 code-prompt-again = Введите новый код доступа.
 
-link-header = [tg_emoji:5422546651019517877:key] <b>Ваши подписки</b>
+link-header = { $emoji_key } <b>Ваши подписки</b>
 link-item =
-    { "" }[tg_emoji:5424853319040412766:small_blue_diamond] <b>{ $description }</b>
+    { $emoji_small_blue_diamond } <b>{ $description }</b>
     Код: <code>{ $code }</code>
 
     { $links }
@@ -53,7 +64,7 @@ help-admin-suffix =
 unknown-command = Неизвестная команда. Отправьте /help, чтобы увидеть список доступных команд.
 unknown-message = Не понимаю это сообщение. Чтобы ввести код доступа, отправьте /code.
 
-broadcast-prefix = [tg_emoji:5422893770276381417:loudspeaker] <b>Сообщение от администрации</b>
+broadcast-prefix = { $emoji_loudspeaker } <b>Сообщение от администрации</b>
 
 yes = Да
 no = Нет
@@ -62,7 +73,7 @@ no = Нет
 
 admin-only = Эта команда доступна только администраторам.
 admin-menu-title =
-    { "" }[tg_emoji:5422836015851151216:gear] <b>Админ-панель</b>
+    { $emoji_gear } <b>Админ-панель</b>
 
     Выберите действие:
 admin-btn-create-code = Создать код
@@ -89,37 +100,40 @@ admin-create-code-prompt-description = Введите описание подп�
 admin-create-code-prompt-squads = Выберите сквады Remnawave, которые получит пользователь при активации этого кода (можно пропустить):
 admin-create-code-squads-empty = Сквады Remnawave недоступны — код будет создан только с фиксированными ссылками.
 admin-create-code-squad-item = { $name }
-admin-create-code-done = [tg_emoji:5425143379656744388:white_check_mark] Код «{ $code }» создан.
+admin-create-code-done = { $emoji_white_check_mark } Код «{ $code }» создан.
 
 admin-page-indicator = · { $page }/{ $total }
-admin-codes-title = [tg_emoji:5422519678624899490:package] <b>Коды</b> ({ $count })
+admin-codes-title = { $emoji_package } <b>Коды</b> ({ $count })
 admin-codes-empty = Пока нет ни одного кода.
 admin-codes-item = { $code } — { $description } ({ $count } ссылок)
 admin-code-detail-title =
-    { "" }[tg_emoji:5422519678624899490:package] <b>{ $code }</b>
+    { $emoji_package } <b>{ $code }</b>
 
     Подписка: { $description }
 admin-code-no-links = Ссылок пока нет.
 admin-code-remove-link-btn = Удалить ссылку #{ $n }
 admin-code-link-removed = Ссылка удалена.
 admin-btn-add-link = Добавить ссылку
+admin-btn-edit-code = Переименовать код
 admin-btn-edit-description = Изменить описание
 admin-btn-delete-code = Удалить код
 admin-code-add-link-prompt = Отправьте новую ссылку для этого кода.
-admin-code-link-added = [tg_emoji:5425143379656744388:white_check_mark] Ссылка добавлена.
+admin-code-link-added = { $emoji_white_check_mark } Ссылка добавлена.
+admin-code-edit-name-prompt = Отправьте новое имя для этого кода (латиница, цифры, «-» или «_», от 8 до 32 символов). Все, у кого уже есть этот код, сохранят доступ под новым именем.
+admin-code-renamed = { $emoji_white_check_mark } Код «{ $old }» переименован в «{ $new }».
 admin-code-edit-description-prompt = Отправьте новое описание (или «-», чтобы очистить).
-admin-code-description-updated = [tg_emoji:5425143379656744388:white_check_mark] Описание обновлено.
+admin-code-description-updated = { $emoji_white_check_mark } Описание обновлено.
 admin-code-deleted = Код «{ $code }» и все его ссылки удалены.
 admin-code-squads-count = Remnawave-сквадов: { $count }
 admin-btn-edit-squads = Remnawave-сквады
 admin-code-edit-squads-prompt = Выберите сквады Remnawave для этого кода:
-admin-code-squads-updated = [tg_emoji:5425143379656744388:white_check_mark] Сквады обновлены.
+admin-code-squads-updated = { $emoji_white_check_mark } Сквады обновлены.
 
-admin-users-title = [tg_emoji:5424728356966933997:bust_in_silhouette] <b>Пользователи</b> ({ $count })
+admin-users-title = { $emoji_bust_in_silhouette } <b>Пользователи</b> ({ $count })
 admin-users-empty = Пока нет ни одного пользователя.
 admin-users-item = { $name } (id { $id }) — кодов: { $count }
 admin-user-detail-title =
-    { "" }[tg_emoji:5424728356966933997:bust_in_silhouette] <b>{ $name }</b>
+    { $emoji_bust_in_silhouette } <b>{ $name }</b>
 
     ID: <code>{ $id }</code>
     Забанен: { $banned }
@@ -138,9 +152,9 @@ admin-link-remnawave-confirm =
     Привязать Remnawave-аккаунт «{ $username }» к пользователю id { $id }?
 
     { $url }
-admin-link-remnawave-done = [tg_emoji:5425143379656744388:white_check_mark] Remnawave-аккаунт привязан к пользователю { $id }.
+admin-link-remnawave-done = { $emoji_white_check_mark } Remnawave-аккаунт привязан к пользователю { $id }.
 
-admin-admins-title = [tg_emoji:5422465824029978096:shield] <b>Администраторы</b> ({ $count })
+admin-admins-title = { $emoji_shield } <b>Администраторы</b> ({ $count })
 admin-admins-item = { $name } (id { $id })
 admin-btn-add-admin = Добавить администратора
 admin-add-admin-choose-method-prompt = Как указать нового администратора?
@@ -151,7 +165,7 @@ admin-add-admin-invalid = Некорректный ID. Отправьте чис
 admin-add-admin-prompt-username = Отправьте username пользователя (с @ или без). Пользователь должен хотя бы раз запустить бота.
 admin-add-admin-username-invalid = Пользователь с таким username не найден. Возможно, он ещё не запускал бота — используйте числовой ID.
 admin-add-admin-already = Этот пользователь уже администратор.
-admin-add-admin-done = [tg_emoji:5425143379656744388:white_check_mark] Пользователь { $id } назначен администратором.
+admin-add-admin-done = { $emoji_white_check_mark } Пользователь { $id } назначен администратором.
 admin-remove-admin-btn = Снять права — { $name }
 admin-remove-admin-done = Права администратора сняты с пользователя { $id }.
 
@@ -161,17 +175,17 @@ admin-add-user-invalid = Пользователь не найден. Если о
 admin-add-user-subs-title = Выберите, какие подписки подключить пользователю { $name } (id { $id }):
 admin-add-user-subs-empty = Пока нет ни одного кода. Сначала создайте код в разделе «Все коды».
 admin-add-user-sub-item = { $code } — { $description }
-admin-add-user-done = [tg_emoji:5425143379656744388:white_check_mark] Пользователь { $id } добавлен. Подключено подписок: { $count }.
+admin-add-user-done = { $emoji_white_check_mark } Пользователь { $id } добавлен. Подключено подписок: { $count }.
 
-admin-broadcast-target-prompt = [tg_emoji:5422893770276381417:loudspeaker] Кому отправить сообщение?
+admin-broadcast-target-prompt = { $emoji_loudspeaker } Кому отправить сообщение?
 admin-broadcast-target-all = Всем пользователям
 admin-broadcast-target-code = По коду
 admin-broadcast-choose-code = Выберите код:
 admin-broadcast-no-codes = Пока нет ни одного кода.
 admin-broadcast-prompt-text = Введите текст сообщения для рассылки:
 admin-broadcast-confirm =
-    { "" }[tg_emoji:5422893770276381417:loudspeaker] Отправить сообщение { $count } пользователям?
+    { $emoji_loudspeaker } Отправить сообщение { $count } пользователям?
 
     { $text }
-admin-broadcast-done = [tg_emoji:5425143379656744388:white_check_mark] Рассылка завершена: { $sent } доставлено, { $failed } ошибок.
+admin-broadcast-done = { $emoji_white_check_mark } Рассылка завершена: { $sent } доставлено, { $failed } ошибок.
 admin-broadcast-empty = Нет получателей для рассылки.

@@ -2,36 +2,31 @@ from aiogram.types import Message
 from aiogram_dialog.widgets.common import WhenCondition
 from aiogram_dialog.widgets.style.base import ButtonStyle, Style
 
+from proxy_bot.config import get_locales_dir
+from proxy_bot.utils.emoji_config import custom_emoji_id, load_emoji_config
+
 
 def not_a_command(message: Message) -> bool:
     """TextInput filter: reject slash-commands so they fall through to command handlers."""
     return not (message.text or "").startswith("/")
 
 
-# Custom-emoji document ids from the bot's Material Symbols icon pack
-# (scripts/generate_emoji_pack.py). Telegram inline buttons carry these via
-# a dedicated icon_custom_emoji_id field, not via text entities, so button
-# label text stays a plain string with no :shortcode: prefix. Regenerating
-# the pack rotates every id here.
-CUSTOM_EMOJI = {
-    "arrow_backward": "5422795535784388529",
-    "bust_in_silhouette": "5424728356966933997",
-    "chevron_left": "5424704180596024830",
-    "chevron_right": "5425123721591435717",
-    "gear": "5422836015851151216",
-    "heavy_plus_sign": "5424912142912498968",
-    "key": "5422546651019517877",
-    "leftwards_arrow_with_hook": "5424694031588303824",
-    "loudspeaker": "5422893770276381417",
-    "no_entry_sign": "5424811928440577113",
-    "package": "5422519678624899490",
-    "pencil2": "5422736930955633489",
-    "question": "5424788606768163410",
-    "shield": "5422465824029978096",
-    "wastebasket": "5425141653079891359",
-    "white_check_mark": "5425143379656744388",
-    "x": "5422801295335533381",
-}
+# Custom-emoji ids for inline-keyboard buttons, derived from
+# locales/emoji.toml (the single source of truth also used by Fluent's
+# `{ $emoji_x }` variables - see utils/i18n.py). Telegram inline buttons
+# carry these via a dedicated icon_custom_emoji_id field, not via text
+# entities, so button label text stays a plain string with no :shortcode:
+# prefix. A shortcode whose config entry is a literal Unicode override
+# (rather than a "[tg_emoji:...]" tag) has no id to give a button -
+# custom_emoji_id() returns None for it, which Style/icon_custom_emoji_id
+# treats as "no icon" rather than an error.
+#
+# Read once at import time, like the dict literal this replaced - button
+# styles are baked into the Window/Button tree when dialogs are built at
+# process startup, so (unlike Fluent text, which re-resolves per message
+# through the hot-reloaded core) an emoji.toml edit needs a bot restart to
+# reach button icons.
+CUSTOM_EMOJI = {name: custom_emoji_id(value) for name, value in load_emoji_config(get_locales_dir() / "emoji.toml").items()}
 
 
 def icon(name: str, color: ButtonStyle | None = None, when: WhenCondition = None) -> Style:

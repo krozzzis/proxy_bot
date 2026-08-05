@@ -98,7 +98,7 @@ links_dialog = Dialog(
             on_click=open_enter_code,
             style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
         ),
-        Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
+        Cancel(I18N("menu-btn-back"), style=icon("leftwards_arrow_with_hook")),
         state=Links.main,
         getter=links_getter,
     ),

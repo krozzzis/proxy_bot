@@ -5,18 +5,24 @@ to Telegram as a custom emoji sticker set owned by a user account.
 Bots can't create sticker sets themselves - custom emoji packs need a
 Premium user account as the owner (Bot API only *references* existing
 custom emoji by id). This script logs in with Telethon as that user,
-uploads one badge PNG per icon, and prints the resulting document ids.
+uploads one badge PNG per icon, and writes the resulting document ids
+straight into locales/emoji.toml - the single source both wiring points
+below read from, so there's nothing left to hand-paste anywhere.
 
 Two distinct wiring points use those ids, and they are not interchangeable:
-- Message text (window titles, prompts): `[tg_emoji:<id>:<shortcode>]` in
-  the .ftl locale files, expanded by EmojiFluentCompileCore (utils/i18n.py)
-  into a `<tg-emoji emoji-id="...">` entity - text entities only apply to
-  message bodies, not button captions.
+- Message text (window titles, prompts): a `{ $emoji_<shortcode> }` Fluent
+  variable in the .ftl locale files, injected automatically from
+  emoji.toml on every render (EmojiFluentCompileCore, utils/i18n.py) and
+  expanded into a `<tg-emoji emoji-id="...">` entity - text entities only
+  apply to message bodies, not button captions.
 - Inline keyboard buttons: the dedicated `icon_custom_emoji_id`/`style`
   fields on InlineKeyboardButton (aiogram_dialog: `Style(emoji_id=...,
-  style=ButtonStyle.PRIMARY)`, see dialogs/common.py: CUSTOM_EMOJI). Button
-  label text stays a plain string with no :shortcode: prefix - clients that
-  predate this field just show the button with no icon.
+  style=ButtonStyle.PRIMARY)`, see dialogs/common.py: CUSTOM_EMOJI, also
+  read from emoji.toml - but only entries that are still a
+  `[tg_emoji:...]` tag get a usable id there; a literal Unicode override
+  can't back a button icon). Button label text stays a plain string with
+  no :shortcode: prefix - clients that predate this field just show the
+  button with no icon.
 
 Requirements (not part of the bot's own runtime dependencies):
     - `rsvg-convert` (nix: `librsvg`, debian: `librsvg2-bin`) on PATH.
@@ -28,16 +34,32 @@ Environment:
     TELEGRAM_SESSION - Telethon session file path (default: ./emoji_pack).
 
 Usage:
+    uv run --group emoji-pack scripts/generate_emoji_pack.py --add-missing
     uv run --group emoji-pack scripts/generate_emoji_pack.py --recreate
+    uv run --group emoji-pack scripts/generate_emoji_pack.py   # replace in place
 
---recreate deletes the existing set *before* uploading the new one (Telegram
-won't let you create a set under a short_name that's still in use, so there's
-no way to upload-then-swap). If a run fails partway - as
-StickerEmojiInvalidError once did here, from an icon whose shortcode isn't a
-real emoji alias - the pack is left deleted and every id in CUSTOM_EMOJI and
-the .ftl files is dangling. Re-run (no --recreate needed, there's nothing
-left to delete) and copy the freshly printed ids over the old ones in both
-places before considering the job done.
+Three modes, pick the narrowest one that covers what changed in ICONS:
+- (no flag) replace_pack: swaps each existing sticker's *image* in place,
+  keeping every id. Only works if ICONS' size still matches the live set's -
+  it can't add or remove icons, only re-render ones already there.
+- --add-missing: appends new ICONS entries to the live set without touching
+  anything already uploaded - existing ids don't change, so you only need to
+  paste the newly printed ones. This is the one to reach for after adding a
+  shortcode to ICONS (as opposed to editing an existing icon's Material name
+  or color).
+- --recreate: deletes the existing set *before* uploading a fresh one
+  (Telegram won't let you create a set under a short_name that's still in
+  use, so there's no way to upload-then-swap). Every id rotates, not just
+  changed ones - reach for this only when you need to reorder or remove
+  icons, not to add one. If a run fails partway - as StickerEmojiInvalidError
+  once did here, from an icon whose shortcode isn't a real emoji alias - the
+  pack is left deleted and locales/emoji.toml's ids are dangling. Re-run (no
+  --recreate needed, there's nothing left to delete) to fix it - the write
+  step below is idempotent.
+
+Any entry in emoji.toml that's already a literal Unicode override (not a
+`[tg_emoji:...]` tag) is left alone on write, in every mode - a manual
+`language = "🌐"` survives a `--recreate` same as anything else.
 """
 
 from __future__ import annotations
@@ -49,10 +71,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 import urllib.request
 from pathlib import Path
 
 import emoji as emoji_lib
+import tomli_w
 
 # shortcode -> Material Symbols "filled" icon name.
 # The shortcode is the existing :shortcode: alias already used throughout
@@ -61,12 +85,14 @@ import emoji as emoji_lib
 ICONS: dict[str, str] = {
     "arrow_backward": "arrow_back",
     "bust_in_silhouette": "person",
+    "check": "check",
     "chevron_left": "chevron_left",
     "chevron_right": "chevron_right",
     "clipboard": "assignment",
     "gear": "settings",
     "heavy_plus_sign": "add",
     "key": "vpn_key",
+    "language": "translate",
     "leftwards_arrow_with_hook": "undo",
     "link": "link",
     "loudspeaker": "campaign",
@@ -82,13 +108,26 @@ ICONS: dict[str, str] = {
     "x": "close",
 }
 
-# chevron_left/right aren't real :shortcode: emoji aliases (the `emoji`
-# package has none), and Telegram's createStickerSet/replaceSticker rejects
-# an item whose "emoji" field isn't an actual emoji character - so these two
-# need an explicit fallback instead of being emojized from their own name.
+# chevron_left/right/language/check aren't real :shortcode: emoji aliases
+# (the `emoji` package has none), and Telegram's
+# createStickerSet/replaceSticker rejects an item whose "emoji" field isn't
+# an actual emoji character - so these need an explicit fallback instead of
+# being emojized from their own name.
+#
+# Kept in sync by hand with utils/emoji_config.py's identical
+# FALLBACK_OVERRIDES (the bot's own <tg-emoji> fallback needs the exact same
+# table, for the exact same reason - a shortcode here with no override there
+# renders as a literal ":shortcode:" string in message text instead of a
+# glyph, since that side has no reachable network to re-derive one from).
+# Not imported from there on purpose: importing anything under `proxy_bot`
+# runs proxy_bot/__init__.py, which pulls in the full bot stack (aiogram,
+# aiogram-dialog, redis, ...) - dependencies this script deliberately
+# doesn't require (see module docstring).
 FALLBACK_OVERRIDES = {
     "chevron_left": "◀️",
     "chevron_right": "▶️",
+    "language": "🌐",
+    "check": "✔️",
 }
 
 # Plain white, no per-category color: a colored icon on a same-colored
@@ -110,6 +149,11 @@ ICON_SIZE = 64
 
 DEFAULT_TITLE = "Proxy Bot Icons"
 DEFAULT_SHORT_NAME = "lprproxy_icons"
+
+# Single source of truth for both wiring points - see utils/emoji_config.py
+# and dialogs/common.py: CUSTOM_EMOJI on the reading side.
+EMOJI_CONFIG_PATH = Path(__file__).resolve().parent.parent / "locales" / "emoji.toml"
+_TAG_RE = re.compile(r"^\[tg_emoji:\d+:[a-z0-9_+\-]+\]$")
 
 
 def fetch_icon_svg(material_name: str) -> str:
@@ -160,6 +204,14 @@ def build_badge_pngs(work_dir: Path, shortcodes: list[str]) -> dict[str, Path]:
 
 def _fallback_for(shortcode: str) -> str:
     return FALLBACK_OVERRIDES.get(shortcode) or emoji_lib.emojize(f":{shortcode}:", language="alias")
+
+
+def _stripped(text: str) -> str:
+    """Telegram drops the U+FE0F "emoji presentation" variation selector
+    from a sticker's `emoticon` before storing it, so a fallback generated
+    locally (which keeps it) never string-equals what GetStickerSet hands
+    back for the same glyph - strip it from both sides before comparing."""
+    return text.replace("\ufe0f", "").replace("\ufe0e", "")
 
 
 async def _upload_document(client, png_path: Path, shortcode: str):
@@ -296,14 +348,136 @@ async def replace_pack(pngs: dict[str, Path], title: str, short_name: str) -> di
     return mapping
 
 
+async def add_missing_icons(work_dir: Path, title: str, short_name: str) -> dict[str, str]:
+    """Append whatever's in ICONS but not yet in the live set, leaving every
+    existing sticker (and its id) untouched - unlike replace_pack (which
+    demands an exact size match and replaces by position) or --recreate
+    (which deletes and rebuilds the whole set, rotating *every* id just to
+    add one icon). This is the point-edit path: "I added a shortcode to
+    ICONS, ship just that."
+
+    "Missing" is decided by fallback emoji, not position: each shortcode's
+    `_fallback_for()` value is checked against the live set's per-document
+    emoji (GetStickerSet's `packs[].emoticon`), so this works no matter
+    where in ICONS' dict order the new keys were inserted - AddStickerToSet
+    can only append at the end, so after this runs once, live document
+    order no longer matches ICONS' order anyway (replace_pack's position
+    trick stops applying and it'll refuse to run - use --recreate at that
+    point if in-place replacement of an existing icon's image is needed).
+
+    Two wrinkles found the hard way (an early version of this compared raw
+    strings and re-uploaded 9 icons that were already there):
+    - Telegram strips the U+FE0F variation selector from `emoticon` before
+      storing it, but `emoji.emojize()` includes it (e.g. "✔️" vs
+      the "✔" Telegram hands back) - comparisons go through
+      `_stripped()` on both sides.
+    - Two shortcodes can legitimately share one fallback glyph (e.g.
+      "arrow_backward" and "chevron_left" are both "◀️") - a live set has
+      one live document per occurrence, so presence is tracked by *count*
+      per stripped glyph, consumed in ICONS' iteration order, rather than a
+      plain set membership check that can't tell "0 of 2 uploaded" from "2
+      of 2 uploaded".
+    """
+    from collections import Counter
+
+    from telethon import TelegramClient
+    from telethon.tl import functions, types
+
+    api_id = int(os.environ["TELEGRAM_API_ID"])
+    api_hash = os.environ["TELEGRAM_API_HASH"]
+    session = os.environ.get("TELEGRAM_SESSION", "emoji_pack")
+
+    client = TelegramClient(session, api_id, api_hash)
+    await client.start()
+
+    input_set = types.InputStickerSetShortName(short_name=short_name)
+    current = await client(functions.messages.GetStickerSetRequest(stickerset=input_set, hash=0))
+
+    if current.set.title != title:
+        await client(functions.stickers.RenameStickerSetRequest(stickerset=input_set, title=title))
+        print(f"renamed set {current.set.title!r} -> {title!r}")
+
+    existing_counts = Counter()
+    for pack in current.packs:
+        existing_counts[pack.emoticon] += len(pack.documents)
+
+    seen_counts = Counter()
+    missing = []
+    for code in ICONS:
+        key = _stripped(_fallback_for(code))
+        seen_counts[key] += 1
+        if seen_counts[key] > existing_counts[key]:
+            missing.append(code)
+    if not missing:
+        print("Nothing to add - every icon in ICONS already has a matching sticker in the live set.")
+        await client.disconnect()
+        return {}
+
+    pngs = build_badge_pngs(work_dir, missing)
+    before_count = len(current.documents)
+    for shortcode in missing:
+        fallback = _fallback_for(shortcode)
+        new_doc = await _upload_document(client, pngs[shortcode], shortcode)
+        input_doc = types.InputDocument(id=new_doc.id, access_hash=new_doc.access_hash, file_reference=new_doc.file_reference)
+        item = types.InputStickerSetItem(document=input_doc, emoji=fallback)
+        await client(functions.stickers.AddStickerToSetRequest(stickerset=input_set, sticker=item))
+        print(f"added {shortcode} (fallback {fallback})")
+
+    # Same rationale as replace_pack: re-fetch rather than trust the
+    # per-call response id. AddStickerToSet always appends, so the new
+    # entries are reliably the tail of the refreshed document list, in the
+    # order they were added - no fallback-matching ambiguity needed here.
+    final = await client(functions.messages.GetStickerSetRequest(stickerset=input_set, hash=0))
+    new_docs = final.documents[before_count:]
+    mapping = {shortcode: str(doc.id) for shortcode, doc in zip(missing, new_docs)}
+
+    await client.disconnect()
+    return mapping
+
+
+def update_emoji_config(path: Path, mapping: dict[str, str]) -> None:
+    """Merge freshly minted ids into locales/emoji.toml. Any shortcode
+    already holding a literal Unicode override (not a `[tg_emoji:...]` tag)
+    is left untouched - this is what makes a manual `language = "🌐"`
+    survive a re-run of any mode, --recreate included. Existing key order
+    is preserved; genuinely new shortcodes are appended in ICONS order."""
+    existing: dict[str, str] = {}
+    if path.exists():
+        with path.open("rb") as fp:
+            existing = tomllib.load(fp).get("emoji", {})
+
+    merged = dict(existing)
+    written, kept_overrides = [], []
+    for shortcode, doc_id in mapping.items():
+        if shortcode in existing and not _TAG_RE.match(existing[shortcode]):
+            kept_overrides.append(shortcode)
+            continue
+        merged[shortcode] = f"[tg_emoji:{doc_id}:{shortcode}]"
+        written.append(shortcode)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as fp:
+        tomli_w.dump({"emoji": merged}, fp)
+
+    print(f"\nWrote {len(written)} id(s) to {path}")
+    if kept_overrides:
+        print(f"Kept existing literal override for: {', '.join(kept_overrides)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--title", default=DEFAULT_TITLE)
     parser.add_argument("--short-name", default=DEFAULT_SHORT_NAME)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--recreate",
         action="store_true",
-        help="delete the existing set and create a fresh one, instead of editing it in place",
+        help="delete the existing set and create a fresh one - rotates every id, not just changed ones",
+    )
+    mode.add_argument(
+        "--add-missing",
+        action="store_true",
+        help="append icons that are in ICONS but not in the live set yet, leaving existing ones untouched",
     )
     args = parser.parse_args()
 
@@ -312,19 +486,20 @@ def main() -> None:
             sys.exit(f"{var} is not set - get one at https://my.telegram.org and export it.")
 
     with tempfile.TemporaryDirectory() as tmp:
-        pngs = build_badge_pngs(Path(tmp), list(ICONS.keys()))
-        if args.recreate:
-            mapping = asyncio.run(create_pack(pngs, args.title, args.short_name, recreate=True))
+        work_dir = Path(tmp)
+        if args.add_missing:
+            mapping = asyncio.run(add_missing_icons(work_dir, args.title, args.short_name))
         else:
-            mapping = asyncio.run(replace_pack(pngs, args.title, args.short_name))
+            pngs = build_badge_pngs(work_dir, list(ICONS.keys()))
+            if args.recreate:
+                mapping = asyncio.run(create_pack(pngs, args.title, args.short_name, recreate=True))
+            else:
+                mapping = asyncio.run(replace_pack(pngs, args.title, args.short_name))
 
-    print("\n# For message text - paste into locales/*/bot.ftl:")
-    for shortcode, doc_id in mapping.items():
-        print(f"[tg_emoji:{doc_id}:{shortcode}]")
+    if not mapping:
+        return
 
-    print("\n# For inline keyboard buttons - paste into dialogs/common.py: CUSTOM_EMOJI:")
-    for shortcode, doc_id in mapping.items():
-        print(f'    "{shortcode}": "{doc_id}",')
+    update_emoji_config(EMOJI_CONFIG_PATH, mapping)
 
 
 if __name__ == "__main__":
