@@ -3,12 +3,11 @@ from __future__ import annotations
 import logging
 
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Multi
+from pydantic import TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import retire_auto_provisioned_account, sync_remnawave_access
@@ -17,7 +16,8 @@ from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 
-from ..common import icon, not_a_command
+from ..common import icon
+from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 
@@ -38,46 +38,51 @@ async def on_dialog_start(start_data: object, manager: DialogManager) -> None:
     if not isinstance(start_data, dict) or "user_id" not in start_data:
         await manager.done()
         return
+    if manager.middleware_data.get("remnawave") is None:
+        # Defensive only - the "Link Remnawave" button that starts this
+        # dialog is itself gated on remnawave being configured, so this
+        # should be unreachable outside a race with a config change.
+        await manager.done()
+        return
     manager.dialog_data["user_id"] = start_data["user_id"]
 
 
-async def enter_username_getter(dialog_manager: DialogManager, **kwargs) -> dict:
-    error = dialog_manager.dialog_data.get("error")
-    return {
-        "id": str(dialog_manager.dialog_data.get("user_id", "")),
-        "not_found": error == "not-found",
-        "lookup_failed": error == "lookup-failed",
-    }
+async def _enter_username_extra_getter(manager: DialogManager) -> dict:
+    return {"id": str(manager.dialog_data.get("user_id", ""))}
 
 
-async def on_username_entered(
-    message: Message, widget: ManagedTextInput, manager: DialogManager, username_text: str
-) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-
-    remnawave = manager.middleware_data.get("remnawave")
-    if remnawave is None:
-        await leave_admin_area(manager)
-        return
-
-    username = username_text.strip().lstrip("@")
+async def _resolve_remnawave_username(username_text: str, manager: DialogManager) -> str | None:
+    remnawave = manager.middleware_data["remnawave"]
+    username = username_text.lstrip("@")
     try:
         rw_user = await remnawave.get_user_by_username(username)
     except RemnawaveError:
         logger.warning("Remnawave lookup failed for username %r", username, exc_info=True)
-        manager.dialog_data["error"] = "lookup-failed"
-        return
+        return "admin-link-remnawave-lookup-failed"
 
     if rw_user is None:
-        manager.dialog_data["error"] = "not-found"
-        return
+        return "admin-link-remnawave-not-found"
 
-    manager.dialog_data.pop("error", None)
     manager.dialog_data["found_uuid"] = rw_user.uuid
     manager.dialog_data["found_username"] = rw_user.username
     manager.dialog_data["found_subscription_url"] = rw_user.subscription_url
+    return None
+
+
+USERNAME_FIELD = FormField(
+    name="link_remnawave_username",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-link-remnawave-prompt",
+    invalid_label="admin-link-remnawave-not-found",  # unreachable: a bare str never fails validation
+    check=_resolve_remnawave_username,
+    extra_getter=_enter_username_extra_getter,
+)
+
+
+async def on_username_done(_username: str, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
     await manager.next()
 
 
@@ -124,17 +129,11 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
 
 
 link_remnawave_dialog = Dialog(
-    Window(
-        Multi(
-            I18N("admin-link-remnawave-prompt", id="{id}"),
-            I18N("admin-link-remnawave-not-found", when="not_found"),
-            I18N("admin-link-remnawave-lookup-failed", when="lookup_failed"),
-            sep="\n\n",
-        ),
-        TextInput(id="link_remnawave_username", on_success=on_username_entered, filter=not_a_command),
+    build_field_window(
+        USERNAME_FIELD,
+        LinkRemnawave.enter_username,
+        on_username_done,
         Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
-        state=LinkRemnawave.enter_username,
-        getter=enter_username_getter,
     ),
     Window(
         I18N("admin-link-remnawave-confirm", id="{id}", username="{username}", url="{url}"),

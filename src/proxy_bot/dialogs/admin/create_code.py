@@ -174,7 +174,9 @@ async def on_squads_done(_callback: CallbackQuery, _button: Button, manager: Dia
 
 
 create_code_dialog = Dialog(
-    build_field_window(CODE_FIELD, AdminCreateCode.enter_code, on_code_done, "admin-btn-cancel", _CANCEL_STYLE),
+    build_field_window(
+        CODE_FIELD, AdminCreateCode.enter_code, on_code_done, Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE)
+    ),
     Window(
         Multi(
             I18N("admin-create-code-prompt-link"),
@@ -194,7 +196,10 @@ create_code_dialog = Dialog(
         getter=step_links_getter,
     ),
     build_field_window(
-        DESCRIPTION_FIELD, AdminCreateCode.enter_description, on_description_done, "admin-btn-cancel", _CANCEL_STYLE
+        DESCRIPTION_FIELD,
+        AdminCreateCode.enter_description,
+        on_description_done,
+        Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
     ),
     Window(
         Case(

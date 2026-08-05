@@ -3,12 +3,12 @@ from __future__ import annotations
 import logging
 
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Case, Multi
+from aiogram_dialog.widgets.text import Case
+from pydantic import TypeAdapter
 
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
@@ -16,7 +16,8 @@ from proxy_bot.utils.audit import actor, actor_id
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 
-from ..common import icon, not_a_command
+from ..common import icon
+from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .link_remnawave import LinkRemnawave
@@ -24,6 +25,7 @@ from .link_remnawave import LinkRemnawave
 logger = logging.getLogger(__name__)
 
 _SUBS_SELECT_ID = "subs_select"
+_CANCEL_STYLE = icon("x", ButtonStyle.DANGER)
 
 
 class AdminAddUser(StatesGroup):
@@ -36,17 +38,8 @@ async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
         await leave_admin_area(manager)
 
 
-async def enter_identifier_getter(dialog_manager: DialogManager, **kwargs) -> dict:
-    return {"identifier_error": dialog_manager.dialog_data.get("identifier_error", False)}
-
-
-async def on_identifier_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, raw: str) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-
+async def _resolve_identifier(identifier: str, manager: DialogManager) -> str | None:
     storage: Storage = manager.middleware_data["storage"]
-    identifier = raw.strip()
 
     if identifier.startswith("@"):
         body, is_id = identifier[1:], False
@@ -72,11 +65,26 @@ async def on_identifier_entered(message: Message, widget: ManagedTextInput, mana
         target_user_id = target_user.user_id if target_user else None
 
     if target_user_id is None:
-        manager.dialog_data["identifier_error"] = True
+        return "admin-add-user-invalid"
+
+    manager.dialog_data["target_user_id"] = target_user_id
+    return None
+
+
+IDENTIFIER_FIELD = FormField(
+    name="add_user_identifier",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-add-user-prompt",
+    invalid_label="admin-add-user-invalid",  # unreachable: a bare str never fails validation
+    check=_resolve_identifier,
+)
+
+
+async def on_identifier_done(_identifier: str, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
         return
 
-    manager.dialog_data.pop("identifier_error", None)
-    manager.dialog_data["target_user_id"] = target_user_id
     # A previous run through this window (Cancel from choose_subscriptions,
     # then a different id/username) must not carry over ticks made for the
     # last target - Multiselect keeps its checked set in widget_data for as
@@ -155,12 +163,11 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
 
 
 add_user_dialog = Dialog(
-    Window(
-        Multi(I18N("admin-add-user-invalid", when="identifier_error"), I18N("admin-add-user-prompt"), sep="\n\n"),
-        TextInput(id="add_user_identifier", on_success=on_identifier_entered, filter=not_a_command),
-        Cancel(I18N("admin-btn-cancel"), style=icon("x", ButtonStyle.DANGER)),
-        state=AdminAddUser.enter_identifier,
-        getter=enter_identifier_getter,
+    build_field_window(
+        IDENTIFIER_FIELD,
+        AdminAddUser.enter_identifier,
+        on_identifier_done,
+        Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
     ),
     Window(
         Case(

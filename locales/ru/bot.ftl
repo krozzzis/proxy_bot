@@ -93,6 +93,7 @@ admin-btn-confirm = Подтвердить
 admin-btn-done = Готово
 admin-btn-undo = Отменить последнюю
 admin-btn-skip = Пропустить
+form-btn-leave-empty = Оставить пустым
 
 admin-create-code-prompt-code = Введите новый код (латиница, цифры, "-" или "_", от 8 до 32 символов):
 admin-create-code-invalid = Недопустимый формат кода. Используйте латиницу, цифры, "-" или "_", от 8 до 32 символов.
@@ -124,7 +125,7 @@ admin-code-add-link-prompt = Отправьте новую ссылку для �
 admin-code-link-added = { $emoji_white_check_mark } Ссылка добавлена.
 admin-code-edit-name-prompt = Отправьте новое имя для этого кода (латиница, цифры, «-» или «_», от 8 до 32 символов). Все, у кого уже есть этот код, сохранят доступ под новым именем.
 admin-code-renamed = { $emoji_white_check_mark } Код «{ $old }» переименован в «{ $new }».
-admin-code-edit-description-prompt = Отправьте новое описание (или «-», чтобы очистить).
+admin-code-edit-description-prompt = Отправьте новое описание.
 admin-code-description-updated = { $emoji_white_check_mark } Описание обновлено.
 admin-code-deleted = Код «{ $code }» и все его ссылки удалены.
 admin-code-squads-count = Remnawave-сквадов: { $count }
@@ -187,10 +188,32 @@ admin-broadcast-target-all = Всем пользователям
 admin-broadcast-target-code = По коду
 admin-broadcast-choose-code = Выберите код:
 admin-broadcast-no-codes = Пока нет ни одного кода.
-admin-broadcast-prompt-text = Введите текст сообщения для рассылки:
+admin-broadcast-prompt-content = Отправьте текст, фото, видео, документ, аудио, голосовое, кружок или стикер для рассылки. Поддерживается форматирование и кастомные эмодзи.
+admin-broadcast-edit-title-btn = Изменить заголовок
+admin-broadcast-title-prompt =
+    Текущий заголовок:
+    <code>{ $current_title }</code>
+
+    Отправьте новый заголовок (поддерживается форматирование), или выберите действие ниже.
+admin-broadcast-title-empty-btn = Пустой заголовок
 admin-broadcast-confirm =
     { $emoji_loudspeaker } Отправить сообщение { $count } пользователям?
 
-    { $text }
-admin-broadcast-done = { $emoji_white_check_mark } Рассылка завершена: { $sent } доставлено, { $failed } ошибок.
+    { $preview }
+admin-broadcast-done = { $emoji_white_check_mark } Рассылка завершена: { $sent } доставлено.{ $failures }
 admin-broadcast-empty = Нет получателей для рассылки.
+
+admin-broadcast-fail-never-started = { $count } пользователям сообщение не доставлено, так как они ещё ни разу не запустили бота.
+admin-broadcast-fail-blocked = { $count } пользователям сообщение не доставлено, так как они заблокировали бота.
+admin-broadcast-fail-deactivated = { $count } пользователям сообщение не доставлено, так как их аккаунты удалены или деактивированы.
+admin-broadcast-fail-other = { $count } пользователям сообщение не доставлено по другой причине.
+
+admin-broadcast-type-photo = Фото
+admin-broadcast-type-video = Видео
+admin-broadcast-type-animation = GIF-анимация
+admin-broadcast-type-document = Документ
+admin-broadcast-type-audio = Аудио
+admin-broadcast-type-voice = Голосовое сообщение
+admin-broadcast-type-video-note = Видео-сообщение
+admin-broadcast-type-sticker = Стикер
+admin-broadcast-type-other = Содержимое

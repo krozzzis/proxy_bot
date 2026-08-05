@@ -3,13 +3,12 @@ from __future__ import annotations
 import logging
 
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, List, Multi
-from pydantic import ValidationError
+from pydantic import TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
@@ -18,7 +17,8 @@ from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 
-from ..common import icon, not_a_command
+from ..common import icon
+from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .create_code import _CODE_ADAPTER, AdminCreateCode
@@ -160,21 +160,30 @@ async def open_add_link(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminCodes.enter_link)
 
 
-async def on_link_entered(message: Message, widget: ManagedTextInput, manager: DialogManager, link_text: str) -> None:
+LINK_FIELD = FormField(
+    name="code_link",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-code-add-link-prompt",
+    invalid_label="admin-code-add-link-prompt",  # unreachable: a bare str never fails validation
+    optional=True,
+    default="",
+)
+
+
+async def on_link_done(link: str, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
 
-    storage: Storage = manager.middleware_data["storage"]
-    i18n = manager.middleware_data["i18n"]
-    admin = manager.middleware_data["event_from_user"]
-    code_id = manager.dialog_data.get("selected_code")
-
-    link = link_text.strip()
     if link:
+        storage: Storage = manager.middleware_data["storage"]
+        i18n = manager.middleware_data["i18n"]
+        bot = manager.middleware_data["bot"]
+        admin = manager.middleware_data["event_from_user"]
+        code_id = manager.dialog_data.get("selected_code")
         await storage.codes.add_link(code_id, link)
         logger.info("%s added a link to code %r", actor(admin), code_id)
-        await message.answer(i18n.get("admin-code-link-added"))
+        await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
     await manager.switch_to(AdminCodes.detail)
 
 
@@ -182,24 +191,30 @@ async def open_edit_description(_callback: CallbackQuery, _button: Button, manag
     await manager.switch_to(AdminCodes.edit_description)
 
 
-async def on_description_entered(
-    message: Message, widget: ManagedTextInput, manager: DialogManager, description_text: str
-) -> None:
+DESCRIPTION_FIELD = FormField(
+    name="code_description",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-code-edit-description-prompt",
+    invalid_label="admin-code-edit-description-prompt",  # unreachable: a bare str never fails validation
+    optional=True,
+    default="",
+)
+
+
+async def on_description_done(description: str, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
 
     storage: Storage = manager.middleware_data["storage"]
     i18n = manager.middleware_data["i18n"]
+    bot = manager.middleware_data["bot"]
     admin = manager.middleware_data["event_from_user"]
     code_id = manager.dialog_data.get("selected_code")
 
-    description = description_text.strip()
-    if description == "-":
-        description = ""
     await storage.codes.set_description(code_id, description)
     logger.info("%s changed description of code %r", actor(admin), code_id)
-    await message.answer(i18n.get("admin-code-description-updated"))
+    await bot.send_message(admin.id, i18n.get("admin-code-description-updated"))
     await manager.switch_to(AdminCodes.detail)
 
 
@@ -207,32 +222,37 @@ async def open_edit_code(_callback: CallbackQuery, _button: Button, manager: Dia
     await manager.switch_to(AdminCodes.edit_code)
 
 
-async def on_code_renamed(
-    message: Message, widget: ManagedTextInput, manager: DialogManager, code_text: str
-) -> None:
+async def _validate_code_rename(new_code: str, manager: DialogManager) -> str | None:
+    storage: Storage = manager.middleware_data["storage"]
+    old_code = manager.dialog_data.get("selected_code")
+    if new_code != old_code and await storage.codes.exists(new_code):
+        return "admin-create-code-exists"
+    return None
+
+
+RENAME_FIELD = FormField(
+    name="code_rename",
+    type_adapter=_CODE_ADAPTER,
+    prompt="admin-code-edit-name-prompt",
+    invalid_label="admin-create-code-invalid",
+    check=_validate_code_rename,
+)
+
+
+async def on_code_renamed_done(new_code: str, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
 
-    storage: Storage = manager.middleware_data["storage"]
-    i18n = manager.middleware_data["i18n"]
-    admin = manager.middleware_data["event_from_user"]
     old_code = manager.dialog_data.get("selected_code")
-
-    new_code = code_text.strip()
-    try:
-        _CODE_ADAPTER.validate_python(new_code)
-    except ValidationError:
-        await message.answer(i18n.get("admin-create-code-invalid"))
-        return
-
     if new_code == old_code:
         await manager.switch_to(AdminCodes.detail)
         return
 
-    if await storage.codes.exists(new_code):
-        await message.answer(i18n.get("admin-create-code-exists"))
-        return
+    storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
+    bot = manager.middleware_data["bot"]
+    admin = manager.middleware_data["event_from_user"]
 
     if await storage.codes.rename(old_code, new_code):
         # codes.toml keys the entry by the code string itself, and every
@@ -242,7 +262,7 @@ async def on_code_renamed(
         await storage.users.rename_code(old_code, new_code)
         manager.dialog_data["selected_code"] = new_code
         logger.info("%s renamed code %r to %r", actor(admin), old_code, new_code)
-        await message.answer(i18n.get("admin-code-renamed", old=old_code, new=new_code))
+        await bot.send_message(admin.id, i18n.get("admin-code-renamed", old=old_code, new=new_code))
     await manager.switch_to(AdminCodes.detail)
 
 
@@ -408,23 +428,23 @@ codes_dialog = Dialog(
         state=AdminCodes.detail,
         getter=codes_detail_getter,
     ),
-    Window(
-        I18N("admin-code-add-link-prompt"),
-        TextInput(id="add_link_input", on_success=on_link_entered, filter=not_a_command),
+    build_field_window(
+        LINK_FIELD,
+        AdminCodes.enter_link,
+        on_link_done,
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
-        state=AdminCodes.enter_link,
     ),
-    Window(
-        I18N("admin-code-edit-description-prompt"),
-        TextInput(id="edit_description_input", on_success=on_description_entered, filter=not_a_command),
+    build_field_window(
+        DESCRIPTION_FIELD,
+        AdminCodes.edit_description,
+        on_description_done,
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail2", state=AdminCodes.detail, style=icon("arrow_backward")),
-        state=AdminCodes.edit_description,
     ),
-    Window(
-        I18N("admin-code-edit-name-prompt"),
-        TextInput(id="edit_code_input", on_success=on_code_renamed, filter=not_a_command),
+    build_field_window(
+        RENAME_FIELD,
+        AdminCodes.edit_code,
+        on_code_renamed_done,
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail4", state=AdminCodes.detail, style=icon("arrow_backward")),
-        state=AdminCodes.edit_code,
     ),
     Window(
         Case(

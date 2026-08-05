@@ -93,6 +93,7 @@ admin-btn-confirm = Confirm
 admin-btn-done = Done
 admin-btn-undo = Undo last
 admin-btn-skip = Skip
+form-btn-leave-empty = Leave empty
 
 admin-create-code-prompt-code = Enter a new code (letters, digits, "-" or "_", 8 to 32 characters):
 admin-create-code-invalid = Invalid code format. Use letters, digits, "-" or "_", 8 to 32 characters long.
@@ -124,7 +125,7 @@ admin-code-add-link-prompt = Send a new link for this code.
 admin-code-link-added = { $emoji_white_check_mark } Link added.
 admin-code-edit-name-prompt = Send a new name for this code (letters, digits, "-" or "_", 8 to 32 characters). Everyone who already has this code keeps their access under the new name.
 admin-code-renamed = { $emoji_white_check_mark } Code "{ $old }" renamed to "{ $new }".
-admin-code-edit-description-prompt = Send a new description (or "-" to clear it).
+admin-code-edit-description-prompt = Send a new description.
 admin-code-description-updated = { $emoji_white_check_mark } Description updated.
 admin-code-deleted = Code "{ $code }" and all its links have been deleted.
 admin-code-squads-count = Remnawave squads: { $count }
@@ -187,10 +188,32 @@ admin-broadcast-target-all = All users
 admin-broadcast-target-code = By code
 admin-broadcast-choose-code = Choose a code:
 admin-broadcast-no-codes = There are no codes yet.
-admin-broadcast-prompt-text = Enter the broadcast message text:
+admin-broadcast-prompt-content = Send the text, photo, video, document, audio, voice message, video note, or sticker to broadcast. Formatting and custom emoji are supported.
+admin-broadcast-edit-title-btn = Edit title
+admin-broadcast-title-prompt =
+    Current title:
+    <code>{ $current_title }</code>
+
+    Send a new title (formatting is supported), or pick an action below.
+admin-broadcast-title-empty-btn = Empty title
 admin-broadcast-confirm =
     { $emoji_loudspeaker } Send this message to { $count } users?
 
-    { $text }
-admin-broadcast-done = { $emoji_white_check_mark } Broadcast finished: { $sent } delivered, { $failed } failed.
+    { $preview }
+admin-broadcast-done = { $emoji_white_check_mark } Broadcast finished: { $sent } delivered.{ $failures }
 admin-broadcast-empty = No recipients for this broadcast.
+
+admin-broadcast-fail-never-started = { $count } users did not receive the message because they have never started the bot.
+admin-broadcast-fail-blocked = { $count } users did not receive the message because they have blocked the bot.
+admin-broadcast-fail-deactivated = { $count } users did not receive the message because their accounts were deleted or deactivated.
+admin-broadcast-fail-other = { $count } users did not receive the message for another reason.
+
+admin-broadcast-type-photo = Photo
+admin-broadcast-type-video = Video
+admin-broadcast-type-animation = GIF
+admin-broadcast-type-document = Document
+admin-broadcast-type-audio = Audio
+admin-broadcast-type-voice = Voice message
+admin-broadcast-type-video-note = Video note
+admin-broadcast-type-sticker = Sticker
+admin-broadcast-type-other = Content
