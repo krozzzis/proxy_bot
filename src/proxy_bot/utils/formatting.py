@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from proxy_bot.config import get_locales_dir
-from proxy_bot.utils.emoji_config import load_emoji_config
+from proxy_bot.utils.emoji_config import expand_tags, load_emoji_config
 
 from .html import esc
 
@@ -12,13 +12,18 @@ from .html import esc
 # that pinned the tag's id as a literal. That id went stale the first time
 # the pack was regenerated (every id rotates on --recreate) since nothing
 # here would pick up the new one, and broke every "my subscriptions" render
-# for any user with a link until caught in production. EmojiFluentCompileCore
-# .get() expands this marker in the fully-assembled message text regardless
-# of whether it came from the .ftl file or, as here, from a value
-# substituted into one of its placeholders - read once at import time, same
-# as dialogs/common.py's CUSTOM_EMOJI (a process restart is needed to pick
-# up a regenerated pack either way).
-_BULLET = load_emoji_config(get_locales_dir() / "emoji.toml").get("link", "🔗")
+# for any user with a link until caught in production - read once at import
+# time, same as dialogs/common.py's CUSTOM_EMOJI (a process restart is
+# needed to pick up a regenerated pack either way).
+#
+# Expanded to real HTML *here*, via expand_tags(), rather than left as a raw
+# "[tg_emoji:...]" marker for EmojiFluentCompileCore to expand later: that
+# only happens for text that passes through Fluent's own get()/get_plain(),
+# and this string is handed straight to a Format() widget (see
+# dialogs/user/links.py), which never touches Fluent at all - a marker left
+# unexpanded here would reach the client as literal bracket text instead of
+# an icon (as happened the first time this bypassed Fluent entirely).
+_BULLET = expand_tags(load_emoji_config(get_locales_dir() / "emoji.toml").get("link", "🔗"))
 
 
 def format_links(links: Sequence[str]) -> str:

@@ -48,8 +48,8 @@ link-none = You don't have any subscriptions yet. Tap "Enter code" to get access
 
 sub-expiry-normal = { $emoji_calendar } Active until: { $date }
 sub-expiry-eternal = { $emoji_calendar } Active until: unlimited { $emoji_infinity }
-sub-traffic-normal = { $used }//{ $limit } GB
-sub-traffic-unlimited = { $used } GB//{ $emoji_infinity }
+sub-traffic-normal = { $used } / { $limit } GB
+sub-traffic-unlimited = { $used } GB / { $emoji_infinity }
 
 help-text =
     <b>Available commands</b>

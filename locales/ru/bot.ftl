@@ -48,8 +48,8 @@ link-none = У вас пока нет ни одной подписки. Нажм
 
 sub-expiry-normal = { $emoji_calendar } Активно до: { $date }
 sub-expiry-eternal = { $emoji_calendar } Активно до: неограниченно { $emoji_infinity }
-sub-traffic-normal = { $used }//{ $limit } ГБ
-sub-traffic-unlimited = { $used } ГБ//{ $emoji_infinity }
+sub-traffic-normal = { $used } / { $limit } ГБ
+sub-traffic-unlimited = { $used } ГБ / { $emoji_infinity }
 
 help-text =
     <b>Доступные команды</b>

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,28 +12,9 @@ from aiogram_i18n.cores import FluentCompileCore
 from aiogram_i18n.managers.base import BaseManager
 
 from proxy_bot.storage import Storage
-from proxy_bot.utils.emoji_config import fallback_for, load_emoji_config, plain_emoji
+from proxy_bot.utils.emoji_config import expand_tags, load_emoji_config, plain_emoji
 
 logger = logging.getLogger(__name__)
-
-# [tg_emoji:<custom_emoji_id>:<fallback_shortcode>] -> a Telegram Premium/custom
-# emoji. <custom_emoji_id> is the numeric id of a real custom emoji document
-# (e.g. obtained via the Bot API's getCustomEmojiStickers, or copied from a
-# client); <fallback_shortcode> is a regular :shortcode:-style alias (no
-# colons) used as the character shown to clients that can't render custom
-# emoji. Expands to Telegram's own <tg-emoji emoji-id="..."> HTML tag, which
-# the Bot API turns into a proper custom_emoji message entity - no manual
-# offset/length bookkeeping needed since we're already sending as HTML.
-_PREMIUM_EMOJI_RE = re.compile(r"\[tg_emoji:(\d+):([a-z0-9_+\-]+)\]")
-
-
-def _expand_premium_emoji(text: str) -> str:
-    def _sub(match: re.Match[str]) -> str:
-        emoji_id, fallback_name = match.group(1), match.group(2)
-        fallback = fallback_for(fallback_name)
-        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
-
-    return _PREMIUM_EMOJI_RE.sub(_sub, text)
 
 
 class EmojiFluentCompileCore(FluentCompileCore):
@@ -73,7 +53,7 @@ class EmojiFluentCompileCore(FluentCompileCore):
 
     def get(self, message: str, locale: str | None = None, /, **kwargs: Any) -> str:
         text = super().get(message, locale, **{**self._emoji_vars, **kwargs})
-        text = _expand_premium_emoji(text)
+        text = expand_tags(text)
         return emoji.emojize(text, language="alias")
 
     def get_plain(self, message: str, locale: str | None = None, /, **kwargs: Any) -> str:
@@ -85,7 +65,7 @@ class EmojiFluentCompileCore(FluentCompileCore):
         tag would show up as literal angle-bracket text instead of an icon.
         See popup_text() below for the call-site-facing wrapper.
 
-        No _expand_premium_emoji pass here: emoji vars are already plain,
+        No expand_tags() pass here: emoji vars are already plain,
         and a literal "[tg_emoji:...]" pasted directly into a popup-only
         .ftl value (rather than reached through a variable) would be a
         message-author mistake - left unexpanded so it's visibly wrong

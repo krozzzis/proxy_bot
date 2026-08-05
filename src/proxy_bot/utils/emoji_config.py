@@ -70,3 +70,31 @@ def plain_emoji(value: str) -> str:
     if match is None:
         return value
     return fallback_for(match.group(2))
+
+
+# Same syntax as _TAG_RE but unanchored, since this one hunts for the tag
+# anywhere inside a larger string (a full rendered message, not a single
+# config value) rather than validating that a whole string is just the tag.
+_EMBEDDED_TAG_RE = re.compile(r"\[tg_emoji:(\d+):([a-z0-9_+\-]+)\]")
+
+
+def expand_tags(text: str) -> str:
+    """Replace every "[tg_emoji:<id>:<shortcode>]" marker in `text` with the
+    real <tg-emoji emoji-id="..."> HTML entity. Used on a message's fully
+    assembled text (utils/i18n.py: EmojiFluentCompileCore.get(), run after
+    Fluent substitution so a marker reaches here whether it was written
+    directly in a .ftl value or, like a link's bullet
+    (utils/formatting.py), built in Python and substituted into a
+    variable) - but also directly by any Python code that builds HTML
+    outside that pipeline entirely (formatting.py again: its output is
+    dropped straight into a Format() widget, which never touches Fluent at
+    all) and still needs a real, already-expanded tag rather than a raw
+    marker a client would show as literal text.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        emoji_id, fallback_name = match.group(1), match.group(2)
+        fallback = fallback_for(fallback_name)
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+
+    return _EMBEDDED_TAG_RE.sub(_sub, text)
