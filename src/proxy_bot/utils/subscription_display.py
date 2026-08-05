@@ -34,6 +34,30 @@ def format_gb(num_bytes: int) -> str:
     return f"{num_bytes / (1024**3):.2f}"
 
 
+# Locale-aware month names for the <tg-time> fallback text (shown only to
+# clients too old to render the entity itself, which then picks its own
+# display via each user's own client locale/settings) - not delegated to
+# datetime.strftime("%B") since that depends on the process's system
+# locale being installed and set, which nothing else in this project
+# relies on (every other piece of translated text is a literal string in
+# locales/*/bot.ftl, not derived from the OS).
+_MONTHS = {
+    "ru": [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    ],
+    "en": [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+    ],
+}
+
+
+def format_date_fallback(dt: datetime, locale: str) -> str:
+    months = _MONTHS.get(locale, _MONTHS["en"])
+    return f"{dt.day} {months[dt.month - 1]} {dt.year}"
+
+
 async def fetch_subscription_lines(
     remnawave: RemnawaveClient | None, uuid: str | None, i18n: Any, *, show_traffic: bool = False
 ) -> dict[str, str] | None:
@@ -76,7 +100,8 @@ async def fetch_subscription_lines(
         # with no explicit format, so the client's own built-in date/time
         # display picks how it looks; the tag's content is only the
         # fallback shown to clients that predate it.
-        date_tag = f'<tg-time unix="{int(dt.timestamp())}">{dt.strftime("%d.%m.%Y")}</tg-time>'
+        fallback = format_date_fallback(dt, i18n.locale)
+        date_tag = f'<tg-time unix="{int(dt.timestamp())}">{fallback}</tg-time>'
         expiry = i18n.get("sub-expiry-normal", date=date_tag)
 
     traffic = ""
