@@ -30,3 +30,13 @@ def format_links(links: Sequence[str]) -> str:
     codes side by side.
     """
     return "\n".join(f"{_BULLET} <code>{esc(link)}</code>" for link in links)
+
+
+def display_name(username: str | None, full_name: str, user_id: int) -> str:
+    """"@username" if set, else the Telegram display name, else a bare id -
+    shared by every admin-panel list that names a Telegram user (users,
+    admins) so they can't drift into showing different things for the same
+    person."""
+    if username:
+        return f"@{username}"
+    return full_name or str(user_id)

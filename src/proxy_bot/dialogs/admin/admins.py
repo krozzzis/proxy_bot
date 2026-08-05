@@ -13,6 +13,7 @@ from aiogram_dialog.widgets.text import List, Multi
 from proxy_bot.commands import set_admin_commands
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
+from proxy_bot.utils.formatting import display_name
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 
@@ -47,10 +48,19 @@ def _is_super_admin(manager: DialogManager) -> bool:
 async def admins_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     admins = await storage.admins.all()
-    items = [
-        {"name": esc(f"@{admin.username}" if admin.username else str(admin.user_id)), "id": str(admin.user_id)}
-        for admin in admins
-    ]
+    items = []
+    for admin in admins:
+        # Admin.username is a snapshot from grant time (AdminRepo.add) and
+        # never updated after - the linked User row (kept fresh by
+        # get_or_create on every interaction) is the current username and
+        # the only place full_name lives at all, so prefer it whenever the
+        # admin has ever started the bot. Falls back to the stale snapshot
+        # only for the edge case of an admin added by numeric ID who never
+        # has (storage.users.get returns None).
+        user = await storage.users.get(admin.user_id)
+        username = user.username if user else admin.username
+        full_name = user.full_name if user else ""
+        items.append({"name": esc(display_name(username, full_name, admin.user_id)), "id": str(admin.user_id)})
     # The root admin comes from config (ROOT_ADMIN_ID), not the TOML file -
     # AdminRepo.remove() only ever touches TOML entries, so a remove button
     # for that row would be a dead click. Leave it out instead of rendering

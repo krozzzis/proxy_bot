@@ -12,6 +12,7 @@ from aiogram_dialog.widgets.text import Case, Multi
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
+from proxy_bot.utils.formatting import display_name
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
@@ -44,12 +45,6 @@ logger = logging.getLogger(__name__)
 PAGE_SIZE = 8
 
 
-def _display_name(username: str | None, full_name: str, user_id: int) -> str:
-    if username:
-        return f"@{username}"
-    return full_name or str(user_id)
-
-
 async def users_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     users = await storage.users.all()
@@ -63,7 +58,7 @@ async def users_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     items = [
         {
             "id": str(u.user_id),
-            "name": esc(_display_name(u.username, u.full_name, u.user_id)),
+            "name": esc(display_name(u.username, u.full_name, u.user_id)),
             "count": len(u.codes),
         }
         for u in chunk
@@ -121,7 +116,7 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
     if user is None:
         return {"found": False, "banned": False, "not_banned": True}
 
-    name = _display_name(user.username, user.full_name, user.user_id)
+    name = display_name(user.username, user.full_name, user.user_id)
     codes = [{"id": code, "code": code} for code in user.codes]
     remnawave = dialog_manager.middleware_data.get("remnawave")
     subscription_info = await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n)
