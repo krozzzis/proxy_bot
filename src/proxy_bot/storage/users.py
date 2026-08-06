@@ -157,3 +157,14 @@ class UserRepo:
             return True
 
         return await self._file.update(mutate)
+
+    async def set_remnawave_disabled(self, user_id: int, disabled: bool) -> bool:
+        def mutate(data: dict) -> bool:
+            users = data.get("users", {})
+            key = str(user_id)
+            if key not in users:
+                return False
+            users[key]["remnawave_disabled"] = disabled
+            return True
+
+        return await self._file.update(mutate)

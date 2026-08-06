@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from proxy_bot.remnawave import RemnawaveClient, RemnawaveError, RemnawaveUser
@@ -22,12 +23,30 @@ async def _create_account(remnawave: RemnawaveClient, db_user: User, squads: lis
     return await remnawave.create_user(username=candidates[-1], telegram_id=db_user.user_id, squads=squads)
 
 
+async def compute_remnawave_squads(storage: Storage, db_user: User) -> list[str]:
+    """The union of `remnawave_squads` across every code `db_user` currently
+    holds - empty if the user's own `remnawave_disabled` override is set
+    (regardless of what their codes would otherwise grant), and a code's
+    contribution is skipped entirely if that code's own `remnawave_disabled`
+    is set."""
+    if db_user.remnawave_disabled:
+        return []
+
+    squads: set[str] = set()
+    for code in db_user.codes:
+        code_record = await storage.codes.get(code)
+        if code_record is not None and not code_record.remnawave_disabled:
+            squads.update(code_record.remnawave_squads)
+    return sorted(squads)
+
+
 async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | None, user_id: int) -> None:
-    """Recompute this user's Remnawave squad membership from the union of
-    `remnawave_squads` across every code they currently hold, provisioning
-    (or re-linking) their account on first grant. Call after any code
-    grant/revoke. No-ops if Remnawave isn't configured; swallows API errors
-    so a panel hiccup never blocks a local code grant/revoke.
+    """Recompute this user's Remnawave squad membership from
+    compute_remnawave_squads(), provisioning (or re-linking) their account
+    on first grant. Call after any code grant/revoke, or after either
+    remnawave_disabled override changes. No-ops if Remnawave isn't
+    configured; swallows API errors so a panel hiccup never blocks a local
+    code grant/revoke.
     """
     if remnawave is None:
         return
@@ -36,12 +55,7 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | N
     if db_user is None:
         return
 
-    squads: set[str] = set()
-    for code in db_user.codes:
-        code_record = await storage.codes.get(code)
-        if code_record is not None:
-            squads.update(code_record.remnawave_squads)
-    squad_list = sorted(squads)
+    squad_list = await compute_remnawave_squads(storage, db_user)
 
     if not squad_list and not db_user.remnawave_uuid:
         return
@@ -61,6 +75,68 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | N
         logger.warning(
             "Remnawave sync failed for %s", actor_id(user_id, db_user.username), exc_info=True
         )
+
+
+async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveClient, db_user: User) -> None:
+    """The pull direction of ban/unban sync: if `db_user`'s linked account
+    was disabled or re-enabled directly on the Remnawave panel (not through
+    this bot), reflect that into the local `banned` flag. The push
+    direction - this bot's own ban/unban toggle - takes effect immediately
+    at the point of action instead (dialogs.admin.users.on_toggle_ban), so
+    this only ever needs to catch a change the bot didn't make itself.
+
+    Only an ACTIVE/DISABLED status is treated as a ban-state signal; every
+    other panel status (expired, traffic-limited, ...) is left alone rather
+    than misread as an admin's decision. Refuses to ban a fellow admin
+    through this path, mirroring on_toggle_ban's own guard - unlike that
+    handler, there's no admin present to show a popup to, so this just logs
+    and leaves the local flag untouched.
+    """
+    if not db_user.remnawave_uuid:
+        return
+    try:
+        rw_user = await remnawave.get_user_by_uuid(db_user.remnawave_uuid)
+    except RemnawaveError:
+        logger.warning(
+            "Failed to fetch Remnawave status for %s", actor_id(db_user.user_id, db_user.username), exc_info=True
+        )
+        return
+    if rw_user is None or rw_user.status not in ("ACTIVE", "DISABLED"):
+        return
+
+    remote_banned = rw_user.status == "DISABLED"
+    if remote_banned == db_user.banned:
+        return
+    if remote_banned and await storage.admins.is_admin(db_user.user_id):
+        logger.warning(
+            "Remnawave shows %s disabled but they're an admin - not mirroring into a local ban",
+            actor_id(db_user.user_id, db_user.username),
+        )
+        return
+
+    await storage.users.set_banned(db_user.user_id, remote_banned)
+    logger.info(
+        "%s %s locally, mirroring a Remnawave panel status change",
+        actor_id(db_user.user_id, db_user.username),
+        "banned" if remote_banned else "unbanned",
+    )
+
+
+async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveClient | None, interval: float = 300.0) -> None:
+    """Periodic sweep for the pull direction of ban-state sync (see
+    sync_ban_state_from_remnawave): every Remnawave-linked user's panel
+    status is checked, and the local `banned` flag updated to match if it
+    disagrees. Runs until cancelled - intended to be spawned as a
+    background task for the bot's lifetime. No-ops entirely if Remnawave
+    isn't configured for this deployment.
+    """
+    if remnawave is None:
+        return
+    while True:
+        for db_user in await storage.users.all():
+            if db_user.remnawave_uuid:
+                await sync_ban_state_from_remnawave(storage, remnawave, db_user)
+        await asyncio.sleep(interval)
 
 
 async def retire_auto_provisioned_account(

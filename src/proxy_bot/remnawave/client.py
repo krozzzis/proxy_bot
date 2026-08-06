@@ -44,6 +44,11 @@ class RemnawaveUser:
     # account (dialogs/admin/link_remnawave.py) could carry a genuinely
     # different value from whoever set it up outside the bot.
     expire_at: str | None = None
+    # "ACTIVE", "DISABLED", or a handful of other panel-driven states
+    # (expired, limited, ...) this app never sets itself - only ACTIVE vs
+    # DISABLED is meaningful to services.remnawave_sync's ban-state
+    # reconciliation; anything else is left alone rather than guessed at.
+    status: str = "ACTIVE"
 
 
 def _parse_user(raw: dict) -> RemnawaveUser:
@@ -56,6 +61,7 @@ def _parse_user(raw: dict) -> RemnawaveUser:
         used_traffic_bytes=(raw.get("userTraffic") or {}).get("usedTrafficBytes", 0),
         traffic_limit_bytes=raw.get("trafficLimitBytes", 0),
         expire_at=raw.get("expireAt"),
+        status=raw.get("status", "ACTIVE"),
     )
 
 
@@ -139,6 +145,10 @@ class RemnawaveClient:
 
     async def disable_user(self, uuid: str) -> RemnawaveUser:
         data = await self._request("PATCH", "/api/users", json={"uuid": uuid, "status": "DISABLED"})
+        return _parse_user(data["response"])
+
+    async def enable_user(self, uuid: str) -> RemnawaveUser:
+        data = await self._request("PATCH", "/api/users", json={"uuid": uuid, "status": "ACTIVE"})
         return _parse_user(data["response"])
 
     async def delete_user(self, uuid: str) -> None:

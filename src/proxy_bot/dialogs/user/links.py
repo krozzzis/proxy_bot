@@ -32,6 +32,7 @@ class Links(StatesGroup):
 # no such wrapper of its own.
 _DETAIL_CONTENT = Multi(
     I18N("link-header"),
+    I18N("link-banned-notice", when="banned"),
     I18N("link-detail-header", code="{code}", description="{description}"),
     Format("{expiry}"),
     Format("{traffic}"),
@@ -59,8 +60,13 @@ async def _build_detail(
     db_user: User, code_record: Code, subscription_info: dict[str, str] | None
 ) -> dict[str, str]:
     links = list(code_record.links)
-    has_remnawave = bool(code_record.remnawave_squads) and subscription_info is not None
-    if code_record.remnawave_squads and db_user.remnawave_subscription_url:
+    # An admin's remnawave_disabled override (per-code or per-user) hides
+    # the Remnawave link/expiry/traffic here even though the account itself
+    # (and its squad grant, if any) is left untouched - see
+    # services.remnawave_sync.compute_remnawave_squads.
+    remnawave_active = not code_record.remnawave_disabled and not db_user.remnawave_disabled
+    has_remnawave = bool(code_record.remnawave_squads) and remnawave_active and subscription_info is not None
+    if code_record.remnawave_squads and remnawave_active and db_user.remnawave_subscription_url:
         links.append(db_user.remnawave_subscription_url)
     return {
         "code": esc(code_record.code),
@@ -68,6 +74,7 @@ async def _build_detail(
         "links": format_links(links),
         "expiry": subscription_info["expiry"] if has_remnawave else "",
         "traffic": subscription_info["traffic"] if has_remnawave else "",
+        "banned": db_user.banned,
     }
 
 
@@ -90,6 +97,7 @@ async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
 
     base = {
         "banner": dialog_manager.dialog_data.pop("banner", None),
+        "banned": db_user.banned,
         "has_links": bool(code_records),
         "no_links": not code_records,
         "single": len(code_records) == 1,
@@ -118,7 +126,7 @@ async def detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
         # render and click - bounce back to the list rather than show a
         # detail view for a code this user no longer (or never did) hold.
         await dialog_manager.switch_to(Links.main)
-        return {"code": "", "description": "", "links": "", "expiry": "", "traffic": ""}
+        return {"code": "", "description": "", "links": "", "expiry": "", "traffic": "", "banned": False}
 
     subscription_info = await _subscription_info(dialog_manager, db_user, i18n)
     return await _build_detail(db_user, code_record, subscription_info)
@@ -140,12 +148,17 @@ links_dialog = Dialog(
             Case(
                 {
                     True: _DETAIL_CONTENT,
-                    False: Multi(I18N("link-header"), I18N("link-choose-prompt"), sep="\n\n"),
+                    False: Multi(
+                        I18N("link-header"),
+                        I18N("link-banned-notice", when="banned"),
+                        I18N("link-choose-prompt"),
+                        sep="\n\n",
+                    ),
                 },
                 selector="single",
                 when="has_links",
             ),
-            I18N("link-none", when="no_links"),
+            Multi(I18N("link-banned-notice", when="banned"), I18N("link-none"), sep="\n\n", when="no_links"),
             sep="\n\n",
         ),
         Column(

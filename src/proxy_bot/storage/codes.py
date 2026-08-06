@@ -120,3 +120,13 @@ class CodeRepo:
             return True
 
         return await self._file.update(mutate)
+
+    async def set_remnawave_disabled(self, code: str, disabled: bool) -> bool:
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if code not in codes:
+                return False
+            codes[code]["remnawave_disabled"] = disabled
+            return True
+
+        return await self._file.update(mutate)

@@ -14,6 +14,10 @@ class Code:
     # Internal squad UUIDs granted on activation. Empty means fixed `links`
     # only - no per-user Remnawave account is provisioned for this code.
     remnawave_squads: list[str] = field(default_factory=list)
+    # Admin override: this code contributes no squads to any holder's
+    # account, regardless of `remnawave_squads` - unlike clearing the squad
+    # list itself, the selection survives being re-enabled later.
+    remnawave_disabled: bool = False
 
 
 @dataclass
@@ -35,6 +39,12 @@ class User:
     # anyone linked before this field existed - their account was in fact
     # auto-provisioned back then, so the default isn't a guess.
     remnawave_linked_manually: bool = False
+    # Admin override: never provision or grant this user Remnawave squads,
+    # regardless of what their codes would otherwise entitle them to. The
+    # existing account (if any) and its uuid are left alone - only the
+    # active grant stops, so re-enabling doesn't need to re-provision or
+    # re-match anything.
+    remnawave_disabled: bool = False
     # Explicit language choice from the settings menu. Empty means "not
     # chosen yet" - falls back to the bot's default_locale.
     locale: str = ""

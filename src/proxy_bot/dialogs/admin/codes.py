@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 _CODE_SQUADS_SELECT_ID = "code_squads_select"
 
+# Same pattern as dialogs.admin.users._REMNAWAVE_TOGGLE_STYLE.
+_REMNAWAVE_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="remnawave_not_disabled") | icon(
+    "white_check_mark", ButtonStyle.SUCCESS, when="remnawave_disabled"
+)
+
 
 async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
@@ -124,6 +129,8 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
         "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
         "has_squads": bool(code.remnawave_squads),
         "squad_count": len(code.remnawave_squads),
+        "remnawave_disabled": code.remnawave_disabled,
+        "remnawave_not_disabled": not code.remnawave_disabled,
     }
 
 
@@ -334,6 +341,35 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
     await manager.switch_to(AdminCodes.list)
 
 
+async def on_toggle_remnawave_disabled(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
+    admin = manager.middleware_data["event_from_user"]
+    remnawave = manager.middleware_data.get("remnawave")
+    code_id = manager.dialog_data.get("selected_code")
+
+    code = await storage.codes.get(code_id)
+    if code is None:
+        return
+
+    new_state = not code.remnawave_disabled
+    await storage.codes.set_remnawave_disabled(code_id, new_state)
+    # Every current holder's squad grant depends on this flag (see
+    # services.remnawave_sync.compute_remnawave_squads) - resync them all
+    # now instead of waiting for each one's next unrelated code grant/revoke.
+    for holder in await storage.users.users_with_code(code_id):
+        await sync_remnawave_access(storage, remnawave, holder.user_id)
+
+    action = "disabled" if new_state else "enabled"
+    logger.info("%s %s Remnawave integration for code %r", actor(admin), action, code_id)
+    popup_key = "admin-code-remnawave-disabled-done" if new_state else "admin-code-remnawave-enabled-done"
+    await callback.answer(popup_text(i18n, popup_key, code=code_id), show_alert=True)
+
+
 codes_dialog = Dialog(
     Window(
         Multi(
@@ -416,6 +452,16 @@ codes_dialog = Dialog(
             on_click=open_edit_squads,
             when="remnawave_available",
             style=icon("shield"),
+        ),
+        Button(
+            Case(
+                {True: I18N("admin-btn-enable-remnawave"), False: I18N("admin-btn-disable-remnawave")},
+                selector="remnawave_disabled",
+            ),
+            id="toggle_code_remnawave_disabled",
+            on_click=on_toggle_remnawave_disabled,
+            when="remnawave_available",
+            style=_REMNAWAVE_TOGGLE_STYLE,
         ),
         Button(
             I18N("admin-btn-delete-code"),

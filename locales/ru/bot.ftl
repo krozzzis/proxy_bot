@@ -47,6 +47,7 @@ link-detail-header =
     { $emoji_format_quote } { $description } { $emoji_format_quote }
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.
 link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
+link-banned-notice = { $emoji_no_entry_sign } <b>Ваша подписка заблокирована администратором.</b>
 
 sub-expiry-normal = Срок действия: до { $date }
 sub-expiry-eternal = Срок действия: неограниченно { $emoji_infinity }
@@ -134,6 +135,10 @@ admin-code-squads-count = Remnawave-сквадов: { $count }
 admin-btn-edit-squads = Remnawave-сквады
 admin-code-edit-squads-prompt = Выберите сквады Remnawave для этого кода:
 admin-code-squads-updated = { $emoji_white_check_mark } Сквады обновлены.
+admin-btn-disable-remnawave = Отключить Remnawave
+admin-btn-enable-remnawave = Включить Remnawave
+admin-code-remnawave-disabled-done = { $emoji_no_entry_sign } Remnawave отключён для кода «{ $code }».
+admin-code-remnawave-enabled-done = { $emoji_white_check_mark } Remnawave включён для кода «{ $code }».
 
 admin-users-title = { $emoji_bust_in_silhouette } <b>Пользователи</b> ({ $count })
 admin-users-empty = Пока нет ни одного пользователя.
@@ -142,19 +147,23 @@ admin-user-detail-title =
     { $emoji_bust_in_silhouette } <b>{ $name }</b>
 
     ID: <code>{ $id }</code>
-    Забанен: { $banned }
+    Заблокирован: { $banned }
 admin-user-codes-none = У пользователя нет активированных кодов.
 admin-btn-subscriptions = Подписки ({ $count })
 admin-user-subscriptions-title = { $emoji_key } <b>Подписки пользователя { $id }</b>
 admin-user-revoke-btn = Отобрать «{ $code }»
 admin-user-revoke-done = Код «{ $code }» отобран у пользователя { $id }.
-admin-user-ban-btn = Забанить пользователя
-admin-user-unban-btn = Разбанить пользователя
-admin-user-ban-admin-denied = Нельзя забанить администратора. Сначала снимите права в разделе «Администраторы».
-admin-user-remnawave-linked = Remnawave: { $username } ({ $source })
-admin-user-remnawave-link-source-auto = автоматически
+admin-user-ban-btn = Заблокировать пользователя
+admin-user-unban-btn = Разблокировать пользователя
+admin-user-ban-admin-denied = Нельзя заблокировать администратора. Сначала снимите права в разделе «Администраторы».
+admin-user-remnawave-linked = Remnawave аккаунт: { $username } ({ $source })
+admin-user-remnawave-link-source-auto = авто
 admin-user-remnawave-link-source-manual = вручную
 admin-btn-link-remnawave = Привязать Remnawave
+admin-btn-unlink-remnawave = Отвязать Remnawave
+admin-user-remnawave-unlinked-done = { $emoji_white_check_mark } Remnawave-аккаунт отвязан от пользователя { $id }.
+admin-user-remnawave-disabled-done = { $emoji_no_entry_sign } Remnawave отключён для пользователя { $id }.
+admin-user-remnawave-enabled-done = { $emoji_white_check_mark } Remnawave включён для пользователя { $id }.
 admin-link-remnawave-prompt = Введите Remnawave-username пользователя, которого нужно привязать к id { $id }:
 admin-link-remnawave-not-found = Пользователь с таким username не найден в Remnawave.
 admin-link-remnawave-lookup-failed = Не удалось обратиться к Remnawave. Попробуйте ещё раз.

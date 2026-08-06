@@ -21,6 +21,7 @@ from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
 from proxy_bot.middlewares import InteractionLoggingMiddleware
 from proxy_bot.remnawave import RemnawaveClient
+from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
 
@@ -87,6 +88,9 @@ async def run() -> None:
     # has no HTTP server to probe, so liveness is "the event loop is still
     # ticking" via a periodically touched file.
     _register_background_task(dp, lambda: run_heartbeat(config.data_dir / ".heartbeat"))
+    # Pull direction of ban-state sync (a panel-side enable/disable flowing
+    # back into `banned`) - no-ops on its own if remnawave is None.
+    _register_background_task(dp, lambda: run_remnawave_ban_sync(storage, remnawave))
 
     await setup_bot_commands(bot, storage)
 

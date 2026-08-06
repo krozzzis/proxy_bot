@@ -47,6 +47,7 @@ link-detail-header =
     { $emoji_format_quote } { $description } { $emoji_format_quote }
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
+link-banned-notice = { $emoji_no_entry_sign } <b>Your subscription has been blocked by an administrator.</b>
 
 sub-expiry-normal = Subscription: until { $date }
 sub-expiry-eternal = Subscription: unlimited { $emoji_infinity }
@@ -134,6 +135,10 @@ admin-code-squads-count = Remnawave squads: { $count }
 admin-btn-edit-squads = Remnawave squads
 admin-code-edit-squads-prompt = Choose the Remnawave squads for this code:
 admin-code-squads-updated = { $emoji_white_check_mark } Squads updated.
+admin-btn-disable-remnawave = Disable Remnawave
+admin-btn-enable-remnawave = Enable Remnawave
+admin-code-remnawave-disabled-done = { $emoji_no_entry_sign } Remnawave disabled for code "{ $code }".
+admin-code-remnawave-enabled-done = { $emoji_white_check_mark } Remnawave enabled for code "{ $code }".
 
 admin-users-title = { $emoji_bust_in_silhouette } <b>Users</b> ({ $count })
 admin-users-empty = There are no users yet.
@@ -142,19 +147,23 @@ admin-user-detail-title =
     { $emoji_bust_in_silhouette } <b>{ $name }</b>
 
     ID: <code>{ $id }</code>
-    Banned: { $banned }
+    Blocked: { $banned }
 admin-user-codes-none = This user has no activated codes.
 admin-btn-subscriptions = Subscriptions ({ $count })
 admin-user-subscriptions-title = { $emoji_key } <b>Subscriptions for user { $id }</b>
 admin-user-revoke-btn = Revoke "{ $code }"
 admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
-admin-user-ban-btn = Ban user
-admin-user-unban-btn = Unban user
-admin-user-ban-admin-denied = Can't ban an administrator. Revoke their admin rights first, in the Administrators section.
-admin-user-remnawave-linked = Remnawave: { $username } ({ $source })
+admin-user-ban-btn = Block user
+admin-user-unban-btn = Unblock user
+admin-user-ban-admin-denied = Can't block an administrator. Revoke their admin rights first, in the Administrators section.
+admin-user-remnawave-linked = Remnawave account: { $username } ({ $source })
 admin-user-remnawave-link-source-auto = auto
 admin-user-remnawave-link-source-manual = manual
 admin-btn-link-remnawave = Link Remnawave
+admin-btn-unlink-remnawave = Unlink Remnawave
+admin-user-remnawave-unlinked-done = { $emoji_white_check_mark } Remnawave account unlinked from user { $id }.
+admin-user-remnawave-disabled-done = { $emoji_no_entry_sign } Remnawave disabled for user { $id }.
+admin-user-remnawave-enabled-done = { $emoji_white_check_mark } Remnawave enabled for user { $id }.
 admin-link-remnawave-prompt = Enter the Remnawave username to link to id { $id }:
 admin-link-remnawave-not-found = No Remnawave user with that username was found.
 admin-link-remnawave-lookup-failed = Couldn't reach Remnawave. Please try again.
