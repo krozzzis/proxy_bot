@@ -5,7 +5,7 @@ import logging
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 
@@ -32,6 +32,7 @@ async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
 class AdminUsers(StatesGroup):
     list = State()
     detail = State()
+    subscriptions = State()
 
 
 # Ban/unban share one button slot whose icon+color follow the user's
@@ -43,6 +44,11 @@ _BAN_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="not_banned")
 logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 8
+# A user's subscription list gets its own paginated submenu (rather than
+# being inlined into the detail window, like the old design) precisely
+# because it has no upper bound - an admin who's granted a lot of codes to
+# one user would otherwise blow the detail window's button list wide open.
+SUB_PAGE_SIZE = 8
 
 
 async def users_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
@@ -117,7 +123,6 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         return {"found": False, "banned": False, "not_banned": True}
 
     name = display_name(user.username, user.full_name, user.user_id)
-    codes = [{"id": code, "code": code} for code in user.codes]
     remnawave = dialog_manager.middleware_data.get("remnawave")
     show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
     subscription_info = await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n, show_traffic=show_traffic)
@@ -129,9 +134,9 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         # a python-side i18n.get() since it's a nested argument value, not
         # window text (a single I18N call can't itself embed another).
         "banned_label": i18n.get("yes") if user.banned else i18n.get("no"),
-        "has_codes": bool(codes),
-        "no_codes": not codes,
-        "codes": codes,
+        "has_codes": bool(user.codes),
+        "no_codes": not user.codes,
+        "codes_count": len(user.codes),
         "banned": user.banned,
         "not_banned": not user.banned,
         "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
@@ -143,6 +148,41 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
             "admin-user-remnawave-link-source-manual" if user.remnawave_linked_manually else "admin-user-remnawave-link-source-auto"
         ),
         **(subscription_info or {"expiry": "", "traffic": ""}),
+    }
+
+
+async def open_subscriptions(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["sub_page"] = 0
+    await manager.switch_to(AdminUsers.subscriptions)
+
+
+async def on_sub_prev_page(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["sub_page"] = max(0, manager.dialog_data.get("sub_page", 0) - 1)
+
+
+async def on_sub_next_page(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data["sub_page"] = manager.dialog_data.get("sub_page", 0) + 1
+
+
+async def user_subscriptions_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    user_id = dialog_manager.dialog_data.get("selected_user_id")
+    user = await storage.users.get(user_id) if user_id is not None else None
+    codes = list(user.codes) if user is not None else []
+
+    total_pages = max(1, (len(codes) + SUB_PAGE_SIZE - 1) // SUB_PAGE_SIZE)
+    page = max(0, min(dialog_manager.dialog_data.get("sub_page", 0), total_pages - 1))
+    dialog_manager.dialog_data["sub_page"] = page
+
+    chunk = codes[page * SUB_PAGE_SIZE : (page + 1) * SUB_PAGE_SIZE]
+    return {
+        "id": str(user_id) if user_id is not None else "",
+        "has_codes": bool(codes),
+        "count": len(codes),
+        "has_pages": total_pages > 1,
+        "page": page + 1,
+        "total": total_pages,
+        "codes": [{"id": code, "code": code} for code in chunk],
     }
 
 
@@ -247,15 +287,12 @@ users_dialog = Dialog(
             },
             selector="found",
         ),
-        Column(
-            Select(
-                I18N("admin-user-revoke-btn", code="{item[code]}"),
-                id="revoke_select",
-                item_id_getter=lambda item: item["id"],
-                items="codes",
-                on_click=on_revoke_code,
-                style=icon("x", ButtonStyle.DANGER),
-            ),
+        Button(
+            I18N("admin-btn-subscriptions", count="{codes_count}"),
+            id="open_subscriptions",
+            on_click=open_subscriptions,
+            when="has_codes",
+            style=icon("key"),
         ),
         Button(
             Case({True: I18N("admin-user-unban-btn"), False: I18N("admin-user-ban-btn")}, selector="banned"),
@@ -274,6 +311,36 @@ users_dialog = Dialog(
         Button(I18N("admin-btn-back"), id="back_to_list", on_click=back_to_list, style=icon("arrow_backward")),
         state=AdminUsers.detail,
         getter=users_detail_getter,
+    ),
+    Window(
+        Case(
+            {
+                True: Multi(
+                    I18N("admin-user-subscriptions-title", id="{id}", count="{count}"),
+                    I18N("admin-page-indicator", when="has_pages"),
+                    sep=" ",
+                ),
+                False: I18N("admin-user-codes-none"),
+            },
+            selector="has_codes",
+        ),
+        Column(
+            Select(
+                I18N("admin-user-revoke-btn", code="{item[code]}"),
+                id="sub_revoke_select",
+                item_id_getter=lambda item: item["id"],
+                items="codes",
+                on_click=on_revoke_code,
+                style=icon("x", ButtonStyle.DANGER),
+            ),
+        ),
+        Row(
+            Button(I18N("admin-btn-prev"), id="sub_prev_page", on_click=on_sub_prev_page, style=icon("chevron_left")),
+            Button(I18N("admin-btn-next"), id="sub_next_page", on_click=on_sub_next_page, style=icon("chevron_right")),
+        ),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail_from_subs", state=AdminUsers.detail, style=icon("arrow_backward")),
+        state=AdminUsers.subscriptions,
+        getter=user_subscriptions_getter,
     ),
     on_start=on_dialog_start,
 )

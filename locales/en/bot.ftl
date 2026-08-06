@@ -144,6 +144,8 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Banned: { $banned }
 admin-user-codes-none = This user has no activated codes.
+admin-btn-subscriptions = Subscriptions ({ $count })
+admin-user-subscriptions-title = { $emoji_key } <b>Subscriptions for user { $id }</b>
 admin-user-revoke-btn = Revoke "{ $code }"
 admin-user-revoke-done = Code "{ $code }" revoked from user { $id }.
 admin-user-ban-btn = Ban user

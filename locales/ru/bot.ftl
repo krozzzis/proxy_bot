@@ -144,6 +144,8 @@ admin-user-detail-title =
     ID: <code>{ $id }</code>
     Забанен: { $banned }
 admin-user-codes-none = У пользователя нет активированных кодов.
+admin-btn-subscriptions = Подписки ({ $count })
+admin-user-subscriptions-title = { $emoji_key } <b>Подписки пользователя { $id }</b>
 admin-user-revoke-btn = Отобрать «{ $code }»
 admin-user-revoke-done = Код «{ $code }» отобран у пользователя { $id }.
 admin-user-ban-btn = Забанить пользователя
