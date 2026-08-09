@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from aiogram import Router
+from aiogram import F, Router
+from aiogram.dispatcher.event.bases import SkipHandler
+from aiogram.enums import ChatType
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
 from aiogram_dialog import DialogManager, ShowMode, StartMode
 
 from proxy_bot.dialogs.admin import AdminMenu
+from proxy_bot.dialogs.common import not_a_command
 from proxy_bot.dialogs.user import EnterCode, Help, Links, UserMenu
 from proxy_bot.filters import IsAdmin
 from proxy_bot.utils.audit import actor
@@ -39,6 +42,39 @@ async def _send_logo(
     sent = await send_before_mode_logo(message, logo_path, logo_overrides, locale)
     if sent is None:
         logger.warning("No usable branded logo file for locale %r (BRANDED_LOGO_PATH=%s)", locale, logo_path)
+
+
+@router.message(F.chat.type == ChatType.PRIVATE, not_a_command)
+async def resync_before_mode_logo(
+    message: Message,
+    dialog_manager: DialogManager,
+    logo_path: Path | None,
+    logo_mode: str,
+    logo_path_overrides: dict[str, Path],
+    i18n,
+) -> None:
+    # aiogram_dialog can't edit a dialog message "into place" below a
+    # message the user just sent (Telegram has no such API) - for a
+    # private chat it always resends the current window as a brand new
+    # message instead (see aiogram_dialog.manager.manager.DialogManager.
+    # _calc_show_mode: ShowMode.SEND whenever the triggering event is a
+    # Message). That's every text the user sends while the main menu is
+    # open, since UserMenu.main has no TextInput of its own to consume it.
+    #
+    # The "before"-mode logo (see _send_logo above) is a separate, plain
+    # message sent once at /start - it isn't part of that resend, so
+    # without this it's left behind above the chat while the menu keeps
+    # reappearing at the bottom, no longer looking like the same splash.
+    # Resending it here keeps the pair together; scoped to UserMenu.main
+    # specifically since that's the only screen this logo is meant to
+    # precede (see _send_logo's docstring) - other dialogs already resend
+    # for their own reasons without needing the logo to follow them there.
+    if dialog_manager.has_context() and dialog_manager.current_context().state == UserMenu.main:
+        await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
+    # Never actually "handles" the message - just resyncs the logo as a
+    # side effect, then lets the normal command/dialog/fallback routing
+    # underneath process it as if this handler didn't exist.
+    raise SkipHandler
 
 
 @router.message(CommandStart(deep_link=True))
