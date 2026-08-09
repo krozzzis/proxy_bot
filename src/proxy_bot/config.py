@@ -39,6 +39,13 @@ class Config:
     # "caption" - attached directly to the main menu message itself (photo
     #             with the menu text as its caption, buttons underneath).
     logo_mode: str
+    # Per-locale overrides, keyed by lowercased locale code (e.g. "ru"),
+    # from any BRANDED_LOGO_PATH_<LOCALE> env var. Optional on top of an
+    # already-optional feature: without an override, utils/branding.py's
+    # resolve_logo_path() still auto-picks a `<logo_path stem>_<locale>
+    # <suffix>` sibling file (logo.png -> logo_ru.png) if one exists, before
+    # falling back to logo_path itself.
+    logo_path_overrides: dict[str, Path]
 
 
 def _require_env(name: str) -> str:
@@ -84,6 +91,7 @@ def load_config() -> Config:
         show_traffic_usage=_bool_env("SHOW_TRAFFIC_USAGE"),
         logo_path=(Path(os.environ["BRANDED_LOGO_PATH"]) if os.environ.get("BRANDED_LOGO_PATH") else None),
         logo_mode=_logo_mode_env(),
+        logo_path_overrides=_logo_path_overrides_env(),
     )
 
 
@@ -95,3 +103,14 @@ def _logo_mode_env() -> str:
         # the logo isn't showing where the operator configured it to.
         raise RuntimeError(f"BRANDED_LOGO_MODE must be one of {_LOGO_MODES}, got {value!r}")
     return value
+
+
+_LOGO_OVERRIDE_PREFIX = "BRANDED_LOGO_PATH_"
+
+
+def _logo_path_overrides_env() -> dict[str, Path]:
+    return {
+        key[len(_LOGO_OVERRIDE_PREFIX) :].lower(): Path(value)
+        for key, value in os.environ.items()
+        if key.startswith(_LOGO_OVERRIDE_PREFIX) and value
+    }

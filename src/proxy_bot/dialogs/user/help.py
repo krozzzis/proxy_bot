@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.text import Multi
 
 from proxy_bot.storage import Storage
 
-from ..common import icon
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 
 
@@ -21,9 +21,10 @@ async def help_getter(storage: Storage, event_from_user, **kwargs) -> dict:
 
 help_dialog = Dialog(
     Window(
+        BRANDED_LOGO_MEDIA,
         Multi(I18N("help-text"), I18N("help-admin-suffix", when="is_admin"), sep="\n\n"),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Help.main,
-        getter=help_getter,
+        getter=[help_getter, branded_logo_getter],
     ),
 )

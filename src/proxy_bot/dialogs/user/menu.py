@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.kbd import Button, Group
-from aiogram_dialog.widgets.media import StaticMedia
-from aiogram_dialog.widgets.text import Case, Format
+from aiogram_dialog.widgets.text import Case
 
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
 
-from ..common import icon
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 from .activation import activate_code
 from .enter_code import EnterCode
@@ -117,17 +115,6 @@ async def main_menu_getter(
     # back to the main menu.
     greeting = dialog_manager.dialog_data.pop("greet", False)
 
-    # Optional branded logo, "caption" mode only (BRANDED_LOGO_MODE) - the
-    # "before" mode's own standalone photo message is sent by the /start
-    # handler instead, before this dialog is even started (see
-    # handlers/user.py: _send_logo). Re-checked on every render, same as
-    # show_traffic_usage below, rather than baked in at Window-definition
-    # time - the Window object is built once at import time, well before
-    # config.py's load_config() ever runs.
-    logo_path = dialog_manager.middleware_data.get("logo_path")
-    logo_mode = dialog_manager.middleware_data.get("logo_mode", "before")
-    show_logo_caption = bool(logo_path and logo_mode == "caption" and Path(logo_path).is_file())
-
     return {
         "greeting": greeting,
         "name": esc(event_from_user.full_name),
@@ -135,14 +122,12 @@ async def main_menu_getter(
         "has_codes": has_codes,
         "no_codes": not has_codes,
         "is_admin": await storage.admins.is_admin(event_from_user.id),
-        "logo_path": str(logo_path) if logo_path else "",
-        "show_logo_caption": show_logo_caption,
     }
 
 
 user_menu_dialog = Dialog(
     Window(
-        StaticMedia(path=Format("{logo_path}"), when="show_logo_caption"),
+        BRANDED_LOGO_MEDIA,
         Case(
             {True: I18N("menu-title-greeting"), False: I18N("menu-title")},
             selector="greeting",
@@ -181,7 +166,7 @@ user_menu_dialog = Dialog(
         Button(I18N("menu-btn-settings"), id="open_settings", on_click=open_settings, style=icon("gear")),
         Button(I18N("menu-btn-admin"), id="open_admin", on_click=open_admin_panel, when="is_admin", style=icon("shield")),
         state=UserMenu.main,
-        getter=main_menu_getter,
+        getter=[main_menu_getter, branded_logo_getter],
     ),
     on_start=on_dialog_start,
     on_process_result=on_enter_code_result,

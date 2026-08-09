@@ -1,8 +1,12 @@
 from aiogram.types import Message
+from aiogram_dialog import DialogManager
 from aiogram_dialog.widgets.common import WhenCondition
+from aiogram_dialog.widgets.media import StaticMedia
 from aiogram_dialog.widgets.style.base import ButtonStyle, Style
+from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.config import get_locales_dir
+from proxy_bot.utils.branding import resolve_logo_path
 from proxy_bot.utils.emoji_config import custom_emoji_id, load_emoji_config
 
 
@@ -41,3 +45,33 @@ def icon(name: str, color: ButtonStyle | None = None, when: WhenCondition = None
     reads as a deliberate signal rather than decoration. `icon(a, when=X) |
     icon(b, when=~X)` picks whichever alternative's condition matches."""
     return Style(style=color, emoji_id=CUSTOM_EMOJI[name], when=when)
+
+
+# Shared "caption" mode (BRANDED_LOGO_MODE) plumbing for every user-facing
+# Window one main-menu button away from UserMenu.main - not just the menu
+# itself. Telegram's editMessageMedia/editMessageCaption can turn a photo
+# message into a different photo message, but there's no API call that
+# turns a photo message into a plain text one - so if only UserMenu.main
+# carried a StaticMedia widget, navigating anywhere else (Links, EnterCode,
+# Help, Settings) forced aiogram_dialog to delete the photo message and
+# send a brand new text-only one instead of editing in place, which read as
+# the branded message getting silently replaced. Adding this same widget
+# (same path, same "when") to every one of those Windows too keeps every
+# hop a photo -> photo edit, so the logo stays put across navigation.
+#
+# One instance, reused by every Window that adds it as a widget - it holds
+# only its own init-time config (path text-widget, when-condition), no
+# per-render state, so sharing it across unrelated dialogs is safe.
+BRANDED_LOGO_MEDIA = StaticMedia(path=Format("{logo_path}"), when="show_logo_caption")
+
+
+async def branded_logo_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+    logo_path = dialog_manager.middleware_data.get("logo_path")
+    logo_mode = dialog_manager.middleware_data.get("logo_mode", "before")
+    logo_overrides = dialog_manager.middleware_data.get("logo_path_overrides") or {}
+    resolved = resolve_logo_path(logo_path, logo_overrides, i18n.locale) if logo_path else None
+    show_logo_caption = bool(resolved is not None and logo_mode == "caption" and resolved.is_file())
+    return {
+        "logo_path": str(resolved) if resolved is not None else "",
+        "show_logo_caption": show_logo_caption,
+    }

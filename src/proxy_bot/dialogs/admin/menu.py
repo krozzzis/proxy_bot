@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Group
 
-from ..common import icon
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .admins import AdminAdmins
@@ -57,6 +57,7 @@ async def close_menu(_callback: CallbackQuery, _button: Button, manager: DialogM
 
 admin_menu_dialog = Dialog(
     Window(
+        BRANDED_LOGO_MEDIA,
         I18N("admin-menu-title"),
         Group(
             Button(I18N("admin-btn-codes"), id="codes", on_click=open_codes, style=icon("package")),
@@ -67,6 +68,7 @@ admin_menu_dialog = Dialog(
         ),
         Button(I18N("admin-btn-close"), id="close", on_click=close_menu, style=icon("arrow_backward")),
         state=AdminMenu.main,
+        getter=branded_logo_getter,
     ),
     on_start=on_dialog_start,
 )

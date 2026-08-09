@@ -49,6 +49,7 @@ even before `admins.toml` exists. More admins can be added from the panel.
 | `REDIS_URL` | if `redis` | — | e.g. `redis://localhost:6379/0` |
 | `BRANDED_LOGO_PATH` | no | — | optional branded logo photo |
 | `BRANDED_LOGO_MODE` | no | `before` | `before` (own message ahead of the menu) or `caption` (attached to the menu message) |
+| `BRANDED_LOGO_PATH_<LOCALE>` | no | — | per-locale override, e.g. `BRANDED_LOGO_PATH_RU` (auto-detected `logo_ru.png`-style siblings work without this) |
 
 See [`.env.example`](.env.example) for the full, commented list.
 

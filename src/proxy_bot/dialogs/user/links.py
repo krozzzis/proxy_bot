@@ -12,7 +12,7 @@ from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
 
-from ..common import icon
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 from .enter_code import EnterCode
 
@@ -143,6 +143,7 @@ async def on_code_selected(_callback, _select, manager: DialogManager, item_id: 
 
 links_dialog = Dialog(
     Window(
+        BRANDED_LOGO_MEDIA,
         Multi(
             I18N("{banner}", when="banner"),
             Case(
@@ -180,13 +181,14 @@ links_dialog = Dialog(
         ),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Links.main,
-        getter=links_getter,
+        getter=[links_getter, branded_logo_getter],
     ),
     Window(
+        BRANDED_LOGO_MEDIA,
         _DETAIL_CONTENT,
         SwitchTo(I18N("menu-btn-back"), id="back_to_list", state=Links.main, style=icon("arrow_backward")),
         state=Links.detail,
-        getter=detail_getter,
+        getter=[detail_getter, branded_logo_getter],
     ),
     on_start=on_start,
     on_process_result=on_enter_code_result,

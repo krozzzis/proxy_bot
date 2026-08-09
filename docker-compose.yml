@@ -33,6 +33,14 @@ services:
       # "before" (own message ahead of the menu) or "caption" (attached to
       # the menu message itself). See .env.example.
       BRANDED_LOGO_MODE: ${BRANDED_LOGO_MODE:-before}
+      # Optional, explicit per-locale logo overrides - one env var per
+      # locale this project ships (locales/ru, locales/en). Without these,
+      # a `logo_<locale><same extension>` file next to BRANDED_LOGO_PATH is
+      # picked up automatically if present (e.g. logo_ru.png next to
+      # logo.png) - these only need setting to point a locale at a path
+      # that doesn't follow that convention. See .env.example.
+      BRANDED_LOGO_PATH_RU: ${BRANDED_LOGO_PATH_RU:-}
+      BRANDED_LOGO_PATH_EN: ${BRANDED_LOGO_PATH_EN:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

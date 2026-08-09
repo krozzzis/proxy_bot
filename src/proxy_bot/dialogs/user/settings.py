@@ -9,7 +9,7 @@ from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.utils.audit import actor
 
-from ..common import icon
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 
 logger = logging.getLogger(__name__)
@@ -57,12 +57,15 @@ async def language_getter(**kwargs) -> dict:
 
 settings_dialog = Dialog(
     Window(
+        BRANDED_LOGO_MEDIA,
         I18N("settings-title"),
         Button(I18N("settings-btn-language"), id="open_language", on_click=open_language, style=icon("language")),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Settings.main,
+        getter=branded_logo_getter,
     ),
     Window(
+        BRANDED_LOGO_MEDIA,
         I18N("settings-language-title"),
         Radio(
             Format("{item[name]}"),
@@ -75,6 +78,6 @@ settings_dialog = Dialog(
         ),
         SwitchTo(I18N("menu-btn-back"), id="back_to_settings", state=Settings.main, style=icon("arrow_backward")),
         state=Settings.language,
-        getter=language_getter,
+        getter=[language_getter, branded_logo_getter],
     ),
 )

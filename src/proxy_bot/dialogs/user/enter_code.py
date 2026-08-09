@@ -9,7 +9,7 @@ from aiogram_dialog.widgets.text import Case, Multi
 
 from proxy_bot.storage import Storage
 
-from ..common import icon, not_a_command
+from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon, not_a_command
 from ..widgets import I18N
 from .activation import activate_code
 
@@ -52,6 +52,7 @@ async def on_code_entered(
 
 enter_code_dialog = Dialog(
     Window(
+        BRANDED_LOGO_MEDIA,
         Case(
             {
                 "invalid": Multi(I18N("code-invalid"), I18N("code-prompt-again"), sep="\n\n"),
@@ -67,7 +68,7 @@ enter_code_dialog = Dialog(
         ),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=EnterCode.main,
-        getter=enter_code_getter,
+        getter=[enter_code_getter, branded_logo_getter],
     ),
     on_start=on_start,
 )
