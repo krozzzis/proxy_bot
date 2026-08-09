@@ -120,8 +120,12 @@ async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         return {"found": False}
 
     # Links can be far longer than Telegram's 64-byte callback_data limit,
-    # so the remove-link buttons address links by position, not by value.
+    # so the remove/reorder buttons address links by position, not by value.
     link_items = [{"id": str(idx), "n": idx + 1} for idx in range(len(code.links))]
+    # A link at either end of the list has no "up"/"down" to move to -
+    # trimming these here (rather than showing every button and no-op'ing
+    # out-of-range moves) keeps the boundary from ever needing an error
+    # popup explaining why a tap did nothing.
     remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
     return {
         "found": True,
@@ -130,6 +134,8 @@ async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "has_links": bool(code.links),
         "links": [link_row(link, i18n) for link in code.links],
         "link_items": link_items,
+        "up_items": link_items[1:],
+        "down_items": link_items[:-1],
         "remnawave_available": remnawave_available,
         "can_add_remnawave_link": remnawave_available and not has_remnawave_link(code.links),
         "has_squads": bool(code.remnawave_squads),
@@ -161,6 +167,37 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
         return
     logger.info("%s removed a link from code %r", actor(admin), code_id)
     await callback.answer(popup_text(i18n, "admin-code-link-removed"))
+
+
+async def _move_link(manager: DialogManager, item_id: str, offset: int) -> None:
+    storage: Storage = manager.middleware_data["storage"]
+    admin = manager.middleware_data["event_from_user"]
+    code_id = manager.dialog_data.get("selected_code")
+
+    # Same "id is an unvalidated echo of the last render" caveat as
+    # on_remove_link - up_items/down_items already exclude the boundary
+    # this offset would run past, but only for the render that produced
+    # this click, not necessarily the current state.
+    try:
+        index = int(item_id)
+    except ValueError:
+        return
+    if await storage.codes.move_link(code_id, index, offset):
+        logger.info("%s reordered a link in code %r", actor(admin), code_id)
+
+
+async def on_move_link_up(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    await _move_link(manager, item_id, -1)
+
+
+async def on_move_link_down(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    await _move_link(manager, item_id, 1)
 
 
 async def open_add_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -466,6 +503,24 @@ codes_dialog = Dialog(
                 False: I18N("admin-codes-empty"),
             },
             selector="found",
+        ),
+        Column(
+            Select(
+                I18N("admin-code-move-link-up-btn", n="{item[n]}"),
+                id="move_link_up_select",
+                item_id_getter=lambda item: item["id"],
+                items="up_items",
+                on_click=on_move_link_up,
+            ),
+        ),
+        Column(
+            Select(
+                I18N("admin-code-move-link-down-btn", n="{item[n]}"),
+                id="move_link_down_select",
+                item_id_getter=lambda item: item["id"],
+                items="down_items",
+                on_click=on_move_link_down,
+            ),
         ),
         Column(
             Select(
