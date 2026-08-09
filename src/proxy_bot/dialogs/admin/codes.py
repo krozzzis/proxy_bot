@@ -13,7 +13,7 @@ from pydantic import TypeAdapter
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import LINK_TYPE_FIX, Link
+from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Link
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
@@ -23,6 +23,7 @@ from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .create_code import _CODE_ADAPTER, AdminCreateCode
+from .links_common import has_remnawave_link, link_row
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,7 @@ async def on_next_page(_callback: CallbackQuery, _button: Button, manager: Dialo
     manager.dialog_data["page"] = manager.dialog_data.get("page", 0) + 1
 
 
-async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     code_id = dialog_manager.dialog_data.get("selected_code")
     code = await storage.codes.get(code_id) if code_id else None
@@ -120,14 +121,16 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     # Links can be far longer than Telegram's 64-byte callback_data limit,
     # so the remove-link buttons address links by position, not by value.
     link_items = [{"id": str(idx), "n": idx + 1} for idx in range(len(code.links))]
+    remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
     return {
         "found": True,
         "code": esc(code.code),
         "description": esc(code.description or "—"),
         "has_links": bool(code.links),
-        "links": [esc(link.url) if link.type == LINK_TYPE_FIX else f"[{link.type}]" for link in code.links],
+        "links": [link_row(link, i18n) for link in code.links],
         "link_items": link_items,
-        "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
+        "remnawave_available": remnawave_available,
+        "can_add_remnawave_link": remnawave_available and not has_remnawave_link(code.links),
         "has_squads": bool(code.remnawave_squads),
         "squad_count": len(code.remnawave_squads),
         "remnawave_disabled": code.remnawave_disabled,
@@ -188,6 +191,27 @@ async def on_link_done(link: str, manager: DialogManager) -> None:
         logger.info("%s added a link to code %r", actor(admin), code_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
     await manager.switch_to(AdminCodes.detail)
+
+
+async def on_add_remnawave_link(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
+    admin = manager.middleware_data["event_from_user"]
+    code_id = manager.dialog_data.get("selected_code")
+
+    code = await storage.codes.get(code_id)
+    # `when="can_add_remnawave_link"` already hides the button once one
+    # exists - guard here too since aiogram_dialog doesn't re-validate a
+    # stale render against current state before delivering the click.
+    if code is None or has_remnawave_link(code.links):
+        return
+    await storage.codes.add_link(code_id, Link(type=LINK_TYPE_REMNAWAVE))
+    logger.info("%s added a Remnawave link to code %r", actor(admin), code_id)
+    await callback.answer(popup_text(i18n, "admin-code-link-added"))
 
 
 async def open_edit_description(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -405,7 +429,7 @@ codes_dialog = Dialog(
                     I18N("admin-code-detail-title"),
                     Case(
                         {
-                            True: List(Format("{pos}. <code>{item}</code>"), items="links", sep="\n"),
+                            True: List(Format("{pos}. {item}"), items="links", sep="\n"),
                             False: I18N("admin-code-no-links"),
                         },
                         selector="has_links",
@@ -428,6 +452,13 @@ codes_dialog = Dialog(
             ),
         ),
         Button(I18N("admin-btn-add-link"), id="add_link", on_click=open_add_link, when="found", style=icon("heavy_plus_sign")),
+        Button(
+            I18N("admin-btn-add-remnawave-link"),
+            id="add_remnawave_link",
+            on_click=on_add_remnawave_link,
+            when="can_add_remnawave_link",
+            style=icon("shield"),
+        ),
         Button(
             I18N("admin-btn-edit-code"),
             id="edit_code",

@@ -14,7 +14,7 @@ from pydantic import StringConstraints, TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import LINK_TYPE_FIX, Link
+from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Link
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
@@ -22,6 +22,7 @@ from ..common import icon, not_a_command
 from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
+from .links_common import has_remnawave_link, link_row
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,14 @@ DESCRIPTION_FIELD = FormField(
 )
 
 
-async def step_links_getter(dialog_manager: DialogManager, **kwargs) -> dict:
-    links = dialog_manager.dialog_data.get("new_links", [])
+async def step_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+    links: list[Link] = dialog_manager.dialog_data.get("new_links", [])
+    remnawave_configured = dialog_manager.middleware_data.get("remnawave") is not None
     return {
         "has_links": bool(links),
         "count": len(links),
-        "links": [esc(link) for link in links],
+        "rows": [link_row(link, i18n) for link in links],
+        "can_add_remnawave": remnawave_configured and not has_remnawave_link(links),
     }
 
 
@@ -91,7 +94,17 @@ async def on_link_added(message: Message, widget: ManagedTextInput, manager: Dia
     link = link_text.strip()
     if not link:
         return
-    manager.dialog_data.setdefault("new_links", []).append(link)
+    manager.dialog_data.setdefault("new_links", []).append(Link(type=LINK_TYPE_FIX, url=link))
+
+
+async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    links: list[Link] = manager.dialog_data.setdefault("new_links", [])
+    # `when="can_add_remnawave"` already hides the button once one exists -
+    # guard here too since aiogram_dialog doesn't re-validate a stale
+    # render against current state before delivering the click.
+    if has_remnawave_link(links):
+        return
+    links.append(Link(type=LINK_TYPE_REMNAWAVE))
 
 
 async def on_undo_last_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -118,11 +131,7 @@ async def _finalize_creation(manager: DialogManager, squads: list[str]) -> None:
     links = manager.dialog_data.get("new_links", [])
     description = manager.dialog_data.get("new_description", "")
     await storage.codes.create(
-        code=code,
-        links=[Link(type=LINK_TYPE_FIX, url=link) for link in links],
-        description=description,
-        created_by=user.id,
-        remnawave_squads=squads,
+        code=code, links=links, description=description, created_by=user.id, remnawave_squads=squads
     )
     logger.info(
         "%s created code %r with %d link(s) and %d remnawave squad(s)",
@@ -187,13 +196,20 @@ create_code_dialog = Dialog(
             I18N("admin-create-code-prompt-link"),
             Multi(
                 I18N("admin-create-code-links-added"),
-                List(Format("{pos}. <code>{item}</code>"), items="links", sep="\n"),
+                List(Format("{pos}. {item}"), items="rows", sep="\n"),
                 sep="\n",
                 when="has_links",
             ),
             sep="\n\n",
         ),
         TextInput(id="cc_link", on_success=on_link_added, filter=not_a_command),
+        Button(
+            I18N("admin-btn-add-remnawave-link"),
+            id="add_remnawave_link",
+            on_click=on_add_remnawave_link,
+            when="can_add_remnawave",
+            style=icon("shield"),
+        ),
         Button(I18N("admin-btn-undo"), id="undo_link", on_click=on_undo_last_link, when="has_links", style=icon("leftwards_arrow_with_hook")),
         Button(I18N("admin-btn-done"), id="links_done", on_click=on_links_done, when="has_links", style=icon("white_check_mark", ButtonStyle.SUCCESS)),
         Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
