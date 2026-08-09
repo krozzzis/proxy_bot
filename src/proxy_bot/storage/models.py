@@ -26,10 +26,16 @@ class Link:
     url: str = ""
 
 
-def _parse_link(raw: str | dict) -> Link:
-    # Pre-migration `codes.toml` rows store links as bare URL strings with
-    # no type/name - always a fixed link back then, since Remnawave access
-    # wasn't representable as a `links` entry at all yet.
+def parse_link(raw: str | dict) -> Link:
+    """A single Link from its raw shape - a bare URL string (pre-migration
+    `codes.toml` rows: no type/name, always a fixed link back then, since
+    Remnawave access wasn't representable as a `links` entry yet) or a
+    `dump_link()`-shaped dict. Also used to round-trip a link through
+    aiogram_dialog's `dialog_data` (see dialogs/admin/create_code.py) - that
+    gets JSON-serialized by this project's FSM storage, which a raw `Link`
+    dataclass instance can't survive, so it's kept there as a plain dict via
+    dump_link() and converted back with this on read.
+    """
     if isinstance(raw, str):
         return Link(type=LINK_TYPE_FIX, name="", url=raw)
     return Link(type=raw.get("type", LINK_TYPE_FIX), name=raw.get("name", ""), url=raw.get("url", ""))
@@ -49,7 +55,7 @@ def parse_links(raw_links: list, remnawave_squads: list[str]) -> list[Link]:
       last - the same position it used to render in) preserves that
       behavior for existing codes without an admin having to redo it by hand.
     """
-    links = [_parse_link(item) for item in raw_links]
+    links = [parse_link(item) for item in raw_links]
     if remnawave_squads and not any(link.type == LINK_TYPE_REMNAWAVE for link in links):
         links.append(Link(type=LINK_TYPE_REMNAWAVE))
     return links

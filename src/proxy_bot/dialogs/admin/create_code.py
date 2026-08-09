@@ -14,7 +14,7 @@ from pydantic import StringConstraints, TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Link
+from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, parse_link
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
@@ -86,7 +86,11 @@ LINK_NAME_FIELD = FormField(
 
 
 async def step_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
-    links: list[Link] = dialog_manager.dialog_data.get("new_links", [])
+    # Stored in dialog_data as plain dump_link()-shaped dicts, not Link
+    # instances - dialog_data gets JSON-serialized by this project's FSM
+    # storage (see fsm/sqlite_storage.py), which a raw dataclass instance
+    # can't survive.
+    links = [parse_link(raw) for raw in dialog_manager.dialog_data.get("new_links", [])]
     remnawave_configured = dialog_manager.middleware_data.get("remnawave") is not None
     return {
         "has_links": bool(links),
@@ -110,7 +114,7 @@ async def on_link_added(message: Message, widget: ManagedTextInput, manager: Dia
 
 
 async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    links: list[Link] = manager.dialog_data.get("new_links", [])
+    links = [parse_link(raw) for raw in manager.dialog_data.get("new_links", [])]
     # `when="can_add_remnawave"` already hides the button once one exists -
     # guard here too since aiogram_dialog doesn't re-validate a stale
     # render against current state before delivering the click.
@@ -128,8 +132,9 @@ async def on_link_name_cancel(_callback: CallbackQuery, _button: Button, manager
 async def on_link_name_done(name: str, manager: DialogManager) -> None:
     pending = manager.dialog_data.pop("pending_link", None)
     if pending is not None:
-        links: list[Link] = manager.dialog_data.setdefault("new_links", [])
-        links.append(Link(type=pending["type"], name=name, url=pending["url"]))
+        # A plain dict, not a Link instance - see step_links_getter.
+        links: list[dict] = manager.dialog_data.setdefault("new_links", [])
+        links.append({"type": pending["type"], "name": name, "url": pending["url"]})
     await manager.switch_to(AdminCreateCode.enter_links)
 
 
@@ -141,7 +146,11 @@ async def on_undo_last_link(_callback: CallbackQuery, _button: Button, manager: 
 
 async def on_links_done(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     if manager.dialog_data.get("new_links"):
-        await manager.next()
+        # Not manager.next(): that advances by window *registration* order,
+        # which put enter_link_name right after enter_links (see
+        # create_code_dialog below) once naming was added - .next() from
+        # here would land on the name prompt instead of the description one.
+        await manager.switch_to(AdminCreateCode.enter_description)
 
 
 async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
@@ -154,7 +163,7 @@ async def _finalize_creation(manager: DialogManager, squads: list[str]) -> None:
     user = manager.middleware_data["event_from_user"]
 
     code = manager.dialog_data["new_code"]
-    links = manager.dialog_data.get("new_links", [])
+    links = [parse_link(raw) for raw in manager.dialog_data.get("new_links", [])]
     description = manager.dialog_data.get("new_description", "")
     await storage.codes.create(
         code=code, links=links, description=description, created_by=user.id, remnawave_squads=squads
