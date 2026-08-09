@@ -5,27 +5,18 @@ from pathlib import Path
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import FSInputFile, Message
+from aiogram.types import Message
 from aiogram_dialog import DialogManager, ShowMode, StartMode
 
 from proxy_bot.dialogs.admin import AdminMenu
 from proxy_bot.dialogs.user import EnterCode, Help, Links, UserMenu
 from proxy_bot.filters import IsAdmin
 from proxy_bot.utils.audit import actor
-from proxy_bot.utils.branding import resolve_logo_path
+from proxy_bot.utils.branding import send_before_mode_logo
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="user")
-
-# file_id Telegram hands back the first time a given (locale-resolved) logo
-# file is uploaded, keyed by (path, mtime) so an operator swapping the file
-# on disk busts the cache instead of the new image silently never being
-# sent. Process-lifetime only - same tradeoff aiogram_dialog's own
-# MediaIdStorage makes for "caption" mode (see dialogs/common.py) - a
-# redeploy just re-uploads once per locale, then every /start after that
-# reuses Telegram's cached copy instead of re-uploading the file from disk.
-_logo_file_id_cache: dict[Path, tuple[float, str]] = {}
 
 
 async def _send_logo(
@@ -40,22 +31,14 @@ async def _send_logo(
     # the menu message - is handled here; it mirrors how the Liberty VPN bot
     # opens /start. The other mode ("caption", attached to the menu message
     # itself) is handled by the dialog windows, not here - see
-    # dialogs/common.py's BRANDED_LOGO_MEDIA widget.
+    # dialogs/common.py's BRANDED_LOGO_MEDIA widget. A later locale switch
+    # (dialogs/user/settings.py) updates whatever gets sent here in place -
+    # see utils/branding.py's send_before_mode_logo/update_before_mode_logo.
     if logo_path is None or logo_mode == "caption":
         return
-    resolved = resolve_logo_path(logo_path, logo_overrides, locale)
-    if resolved is None or not resolved.is_file():
-        logger.warning("No usable branded logo file for locale %r (looked at %s)", locale, resolved)
-        return
-
-    mtime = resolved.stat().st_mtime
-    cached = _logo_file_id_cache.get(resolved)
-    if cached is not None and cached[0] == mtime:
-        sent = await message.answer_photo(cached[1])
-    else:
-        sent = await message.answer_photo(FSInputFile(resolved))
-        if sent.photo:
-            _logo_file_id_cache[resolved] = (mtime, sent.photo[-1].file_id)
+    sent = await send_before_mode_logo(message, logo_path, logo_overrides, locale)
+    if sent is None:
+        logger.warning("No usable branded logo file for locale %r (BRANDED_LOGO_PATH=%s)", locale, logo_path)
 
 
 @router.message(CommandStart(deep_link=True))

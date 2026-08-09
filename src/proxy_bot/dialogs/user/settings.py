@@ -8,6 +8,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Radio, SwitchTo
 from aiogram_dialog.widgets.text import Format
 
 from proxy_bot.utils.audit import actor
+from proxy_bot.utils.branding import update_before_mode_logo
 
 from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
@@ -49,6 +50,18 @@ async def on_language_selected(_callback, _radio, manager: DialogManager, item_i
     user = manager.middleware_data["event_from_user"]
     await i18n.set_locale(item_id)
     logger.info("%s switched language to %s", actor(user), item_id)
+
+    # "caption" mode's logo re-resolves and swaps on its own - it's part of
+    # this very window's next render, driven by branded_logo_getter reading
+    # the locale we just set. "before" mode's logo is a separate, plain
+    # message sent once at /start, entirely outside the dialog framework -
+    # nothing else would ever touch it again, so it's updated explicitly
+    # here. A no-op if that mode was never used in this chat this process's
+    # lifetime (see utils/branding.py).
+    bot = manager.middleware_data["bot"]
+    logo_path = manager.middleware_data.get("logo_path")
+    logo_overrides = manager.middleware_data.get("logo_path_overrides") or {}
+    await update_before_mode_logo(bot, user.id, logo_path, logo_overrides, item_id)
 
 
 async def language_getter(**kwargs) -> dict:
