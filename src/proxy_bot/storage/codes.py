@@ -3,12 +3,30 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .models import Code
+from .models import Code, Link, dump_link, parse_links
 from .toml_file import TomlFile
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _normalize_entry_links(entry: dict) -> list[dict]:
+    """Rewrite `entry["links"]` in place to the canonical list-of-dict shape
+    (migrating legacy bare-string links and synthesizing a `remnawave`-type
+    entry per models.parse_links, if `remnawave_squads` calls for one) and
+    return it.
+
+    Every mutator below that indexes into `links` calls this first, so it
+    operates on - and persists - the exact same shape `CodeRepo.get`/`all`
+    would produce in memory from this entry (see models.Code.from_raw). That
+    keeps positions in sync: without this, a link synthesized only in
+    memory on read would shift every later index that
+    remove_link_at/move_link addresses by position.
+    """
+    links = parse_links(entry.get("links", []), entry.get("remnawave_squads", []))
+    entry["links"] = [dump_link(link) for link in links]
+    return entry["links"]
 
 
 class CodeRepo:
@@ -20,19 +38,19 @@ class CodeRepo:
         raw = data.get("codes", {}).get(code)
         if raw is None:
             return None
-        return Code(code=code, **raw)
+        return Code.from_raw(code, raw)
 
     async def exists(self, code: str) -> bool:
         return await self.get(code) is not None
 
     async def all(self) -> list[Code]:
         data = await self._file.read()
-        return [Code(code=key, **raw) for key, raw in data.get("codes", {}).items()]
+        return [Code.from_raw(key, raw) for key, raw in data.get("codes", {}).items()]
 
     async def create(
         self,
         code: str,
-        links: list[str],
+        links: list[Link],
         description: str,
         created_by: int,
         remnawave_squads: list[str] | None = None,
@@ -44,14 +62,15 @@ class CodeRepo:
             if code in codes:
                 return None
             codes[code] = {
-                "links": list(links),
+                "links": [dump_link(link) for link in links],
                 "description": description,
                 "created_by": created_by,
                 "created_at": _now(),
                 "active": True,
                 "remnawave_squads": list(remnawave_squads or []),
             }
-            return Code(code=code, **codes[code])
+            _normalize_entry_links(codes[code])
+            return Code.from_raw(code, codes[code])
 
         return await self._file.update(mutate)
 
@@ -78,25 +97,45 @@ class CodeRepo:
 
         return await self._file.update(mutate)
 
-    async def add_link(self, code: str, link: str) -> bool:
+    async def add_link(self, code: str, link: Link) -> bool:
         def mutate(data: dict) -> bool:
             codes = data.get("codes", {})
             if code not in codes:
                 return False
-            codes[code].setdefault("links", []).append(link)
+            links = _normalize_entry_links(codes[code])
+            links.append(dump_link(link))
             return True
 
         return await self._file.update(mutate)
 
-    async def remove_link(self, code: str, link: str) -> bool:
+    async def remove_link_at(self, code: str, index: int) -> bool:
         def mutate(data: dict) -> bool:
             codes = data.get("codes", {})
             if code not in codes:
                 return False
-            links = codes[code].get("links", [])
-            if link not in links:
+            links = _normalize_entry_links(codes[code])
+            if not (0 <= index < len(links)):
                 return False
-            links.remove(link)
+            links.pop(index)
+            return True
+
+        return await self._file.update(mutate)
+
+    async def move_link(self, code: str, index: int, offset: int) -> bool:
+        """Swap the link at `index` with the one `offset` positions away
+        (-1 = up/earlier, +1 = down/later). Returns False if either
+        position is out of range - including at either end of the list, so
+        callers don't need to special-case the boundary themselves."""
+
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if code not in codes:
+                return False
+            links = _normalize_entry_links(codes[code])
+            target = index + offset
+            if not (0 <= index < len(links) and 0 <= target < len(links)):
+                return False
+            links[index], links[target] = links[target], links[index]
             return True
 
         return await self._file.update(mutate)
@@ -117,6 +156,10 @@ class CodeRepo:
             if code not in codes:
                 return False
             codes[code]["remnawave_squads"] = list(squads)
+            # A code that just gained squads but has no `remnawave`-type
+            # link entry yet would otherwise grant access with nothing in
+            # "my subscriptions" pointing at it - see models.parse_links.
+            _normalize_entry_links(codes[code])
             return True
 
         return await self._file.update(mutate)

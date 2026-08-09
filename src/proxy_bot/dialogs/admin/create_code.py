@@ -14,6 +14,7 @@ from pydantic import StringConstraints, TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.storage import Storage
+from proxy_bot.storage.models import LINK_TYPE_FIX, Link
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 
@@ -117,7 +118,11 @@ async def _finalize_creation(manager: DialogManager, squads: list[str]) -> None:
     links = manager.dialog_data.get("new_links", [])
     description = manager.dialog_data.get("new_description", "")
     await storage.codes.create(
-        code=code, links=links, description=description, created_by=user.id, remnawave_squads=squads
+        code=code,
+        links=[Link(type=LINK_TYPE_FIX, url=link) for link in links],
+        description=description,
+        created_by=user.id,
+        remnawave_squads=squads,
     )
     logger.info(
         "%s created code %r with %d link(s) and %d remnawave squad(s)",

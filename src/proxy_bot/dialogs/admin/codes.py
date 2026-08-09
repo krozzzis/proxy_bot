@@ -13,6 +13,7 @@ from pydantic import TypeAdapter
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
+from proxy_bot.storage.models import LINK_TYPE_FIX, Link
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
@@ -124,7 +125,7 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
         "code": esc(code.code),
         "description": esc(code.description or "—"),
         "has_links": bool(code.links),
-        "links": [esc(link) for link in code.links],
+        "links": [esc(link.url) if link.type == LINK_TYPE_FIX else f"[{link.type}]" for link in code.links],
         "link_items": link_items,
         "remnawave_available": dialog_manager.middleware_data.get("remnawave") is not None,
         "has_squads": bool(code.remnawave_squads),
@@ -144,9 +145,6 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
     admin = manager.middleware_data["event_from_user"]
     code_id = manager.dialog_data.get("selected_code")
 
-    code = await storage.codes.get(code_id)
-    if code is None:
-        return
     # item_id is a Select item id echoed back verbatim from callback_data,
     # not re-validated against the currently rendered link_items by
     # aiogram_dialog - guard the cast rather than assume it's still one of
@@ -155,10 +153,8 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
         index = int(item_id)
     except ValueError:
         return
-    if not (0 <= index < len(code.links)):
+    if not await storage.codes.remove_link_at(code_id, index):
         return
-    link = code.links[index]
-    await storage.codes.remove_link(code_id, link)
     logger.info("%s removed a link from code %r", actor(admin), code_id)
     await callback.answer(popup_text(i18n, "admin-code-link-removed"))
 
@@ -188,7 +184,7 @@ async def on_link_done(link: str, manager: DialogManager) -> None:
         bot = manager.middleware_data["bot"]
         admin = manager.middleware_data["event_from_user"]
         code_id = manager.dialog_data.get("selected_code")
-        await storage.codes.add_link(code_id, link)
+        await storage.codes.add_link(code_id, Link(type=LINK_TYPE_FIX, url=link))
         logger.info("%s added a link to code %r", actor(admin), code_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
     await manager.switch_to(AdminCodes.detail)

@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import Code, User
+from proxy_bot.storage.models import LINK_TYPE_FIX, Code, User
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
@@ -59,7 +59,7 @@ async def on_enter_code_result(_start_data: object, result: object, manager: Dia
 async def _build_detail(
     db_user: User, code_record: Code, subscription_info: dict[str, str] | None
 ) -> dict[str, str]:
-    links = list(code_record.links)
+    links = [link.url for link in code_record.links if link.type == LINK_TYPE_FIX]
     # An admin's remnawave_disabled override (per-code or per-user) hides
     # the Remnawave link/expiry/traffic here even though the account itself
     # (and its squad grant, if any) is left untouched - see
