@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import LINK_TYPE_FIX, Code, User
+from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Code, User
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
@@ -56,22 +56,40 @@ async def on_enter_code_result(_start_data: object, result: object, manager: Dia
         manager.dialog_data["banner"] = result["banner"]
 
 
+def _resolve_link_entries(
+    code_record: Code, db_user: User, remnawave_active: bool, subscription_info: dict[str, str] | None
+) -> list[tuple[str, str]]:
+    """Each of `code_record.links`, in list order, as a `(name, url)` pair
+    ready for format_links() - a `remnawave` entry resolves to the holder's
+    live subscription URL and is dropped entirely (not rendered with a
+    blank url) when there's nothing to point it at: Remnawave inactive for
+    this code/user, no linked account, or subscription_info came back None
+    (see fetch_subscription_lines - unlinked, or a panel error).
+    """
+    entries = []
+    for link in code_record.links:
+        if link.type == LINK_TYPE_FIX:
+            entries.append((link.name, link.url))
+        elif remnawave_active and subscription_info is not None and db_user.remnawave_subscription_url:
+            entries.append((link.name, db_user.remnawave_subscription_url))
+    return entries
+
+
 async def _build_detail(
     db_user: User, code_record: Code, subscription_info: dict[str, str] | None
 ) -> dict[str, str]:
-    links = [link.url for link in code_record.links if link.type == LINK_TYPE_FIX]
     # An admin's remnawave_disabled override (per-code or per-user) hides
     # the Remnawave link/expiry/traffic here even though the account itself
     # (and its squad grant, if any) is left untouched - see
     # services.remnawave_sync.compute_remnawave_squads.
     remnawave_active = not code_record.remnawave_disabled and not db_user.remnawave_disabled
-    has_remnawave = bool(code_record.remnawave_squads) and remnawave_active and subscription_info is not None
-    if code_record.remnawave_squads and remnawave_active and db_user.remnawave_subscription_url:
-        links.append(db_user.remnawave_subscription_url)
+    has_remnawave_link = any(link.type == LINK_TYPE_REMNAWAVE for link in code_record.links)
+    has_remnawave = has_remnawave_link and remnawave_active and subscription_info is not None
+    entries = _resolve_link_entries(code_record, db_user, remnawave_active, subscription_info)
     return {
         "code": esc(code_record.code),
         "description": esc(code_record.description or code_record.code),
-        "links": format_links(links),
+        "links": format_links(entries),
         "expiry": subscription_info["expiry"] if has_remnawave else "",
         "traffic": subscription_info["traffic"] if has_remnawave else "",
         "banned": db_user.banned,

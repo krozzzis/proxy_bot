@@ -26,4 +26,6 @@ def link_row(link: Link, i18n) -> str:
     else:
         type_label = i18n.get("admin-code-link-type-fix")
         value = f"<code>{esc(link.url)}</code>"
+    if link.name:
+        return i18n.get("admin-code-link-row-named", name=esc(link.name), type=type_label, value=value)
     return i18n.get("admin-code-link-row", type=type_label, value=value)

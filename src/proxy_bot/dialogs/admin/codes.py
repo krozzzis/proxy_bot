@@ -44,6 +44,7 @@ class AdminCodes(StatesGroup):
     list = State()
     detail = State()
     enter_link = State()
+    enter_link_name = State()
     edit_description = State()
     edit_squads = State()
     edit_code = State()
@@ -175,32 +176,35 @@ LINK_FIELD = FormField(
     default="",
 )
 
+LINK_NAME_FIELD = FormField(
+    name="code_link_name",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-code-link-name-prompt",
+    invalid_label="admin-code-link-name-prompt",  # unreachable: a bare str never fails validation
+    optional=True,
+    skip_label="admin-btn-skip",
+    default="",
+)
+
 
 async def on_link_done(link: str, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
 
-    if link:
-        storage: Storage = manager.middleware_data["storage"]
-        i18n = manager.middleware_data["i18n"]
-        bot = manager.middleware_data["bot"]
-        admin = manager.middleware_data["event_from_user"]
-        code_id = manager.dialog_data.get("selected_code")
-        await storage.codes.add_link(code_id, Link(type=LINK_TYPE_FIX, url=link))
-        logger.info("%s added a link to code %r", actor(admin), code_id)
-        await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
-    await manager.switch_to(AdminCodes.detail)
+    if not link:
+        await manager.switch_to(AdminCodes.detail)
+        return
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_FIX, "url": link}
+    await manager.switch_to(AdminCodes.enter_link_name)
 
 
-async def on_add_remnawave_link(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
 
     storage: Storage = manager.middleware_data["storage"]
-    i18n = manager.middleware_data["i18n"]
-    admin = manager.middleware_data["event_from_user"]
     code_id = manager.dialog_data.get("selected_code")
 
     code = await storage.codes.get(code_id)
@@ -209,9 +213,31 @@ async def on_add_remnawave_link(callback: CallbackQuery, _button: Button, manage
     # stale render against current state before delivering the click.
     if code is None or has_remnawave_link(code.links):
         return
-    await storage.codes.add_link(code_id, Link(type=LINK_TYPE_REMNAWAVE))
-    logger.info("%s added a Remnawave link to code %r", actor(admin), code_id)
-    await callback.answer(popup_text(i18n, "admin-code-link-added"))
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": ""}
+    await manager.switch_to(AdminCodes.enter_link_name)
+
+
+async def on_link_name_cancel(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop("pending_link", None)
+    await manager.switch_to(AdminCodes.detail)
+
+
+async def on_link_name_done(name: str, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    pending = manager.dialog_data.pop("pending_link", None)
+    if pending is not None:
+        storage: Storage = manager.middleware_data["storage"]
+        i18n = manager.middleware_data["i18n"]
+        bot = manager.middleware_data["bot"]
+        admin = manager.middleware_data["event_from_user"]
+        code_id = manager.dialog_data.get("selected_code")
+        await storage.codes.add_link(code_id, Link(type=pending["type"], name=name, url=pending["url"]))
+        logger.info("%s added a %s link to code %r", actor(admin), pending["type"], code_id)
+        await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
+    await manager.switch_to(AdminCodes.detail)
 
 
 async def open_edit_description(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -506,6 +532,12 @@ codes_dialog = Dialog(
         AdminCodes.enter_link,
         on_link_done,
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
+    ),
+    build_field_window(
+        LINK_NAME_FIELD,
+        AdminCodes.enter_link_name,
+        on_link_name_done,
+        Button(I18N("admin-btn-back"), id="link_name_back", on_click=on_link_name_cancel, style=icon("arrow_backward")),
     ),
     build_field_window(
         DESCRIPTION_FIELD,

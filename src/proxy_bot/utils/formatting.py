@@ -26,15 +26,25 @@ from .html import esc
 _BULLET = expand_tags(load_emoji_config(get_locales_dir() / "emoji.toml").get("link", "🔗"))
 
 
-def format_links(links: Sequence[str]) -> str:
-    """Render a monospaced (tap-to-copy) list of links for HTML parse mode.
+def format_links(entries: Sequence[tuple[str, str]]) -> str:
+    """Render a monospaced (tap-to-copy) list of links for HTML parse mode,
+    one `(name, url)` pair per entry - fixed and Remnawave links alike, in
+    whatever order the caller already resolved them in (see
+    dialogs/user/links.py._resolve_link_entries).
 
-    Every link gets the same bullet regardless of how many there are -
-    omitting it for a lone link made single- and multi-link codes look
-    inconsistent with each other in a "my links" screen listing several
-    codes side by side.
+    A named entry renders as "((bullet)) ((name)):\\n ((url))"; an unnamed
+    one (every link that predates naming, or one an admin left blank)
+    degrades to the original single-line "((bullet)) ((url))" - every link
+    gets the same bullet regardless of how many there are, so a lone link
+    doesn't look inconsistent with a multi-link code shown right next to it.
     """
-    return "\n".join(f"{_BULLET} <code>{esc(link)}</code>" for link in links)
+    lines = []
+    for name, url in entries:
+        if name:
+            lines.append(f"{_BULLET} {esc(name)}:\n <code>{esc(url)}</code>")
+        else:
+            lines.append(f"{_BULLET} <code>{esc(url)}</code>")
+    return "\n".join(lines)
 
 
 def display_name(username: str | None, full_name: str, user_id: int) -> str:

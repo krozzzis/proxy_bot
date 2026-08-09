@@ -32,6 +32,7 @@ _SQUADS_SELECT_ID = "cc_squads_select"
 class AdminCreateCode(StatesGroup):
     enter_code = State()
     enter_links = State()
+    enter_link_name = State()
     enter_description = State()
     enter_squads = State()
 
@@ -73,6 +74,16 @@ DESCRIPTION_FIELD = FormField(
     default="",
 )
 
+LINK_NAME_FIELD = FormField(
+    name="link_name",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-create-code-link-name-prompt",
+    invalid_label="admin-create-code-link-name-prompt",  # unreachable: a bare str never fails validation
+    optional=True,
+    skip_label="admin-btn-skip",
+    default="",
+)
+
 
 async def step_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     links: list[Link] = dialog_manager.dialog_data.get("new_links", [])
@@ -94,17 +105,32 @@ async def on_link_added(message: Message, widget: ManagedTextInput, manager: Dia
     link = link_text.strip()
     if not link:
         return
-    manager.dialog_data.setdefault("new_links", []).append(Link(type=LINK_TYPE_FIX, url=link))
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_FIX, "url": link}
+    await manager.switch_to(AdminCreateCode.enter_link_name)
 
 
 async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    links: list[Link] = manager.dialog_data.setdefault("new_links", [])
+    links: list[Link] = manager.dialog_data.get("new_links", [])
     # `when="can_add_remnawave"` already hides the button once one exists -
     # guard here too since aiogram_dialog doesn't re-validate a stale
     # render against current state before delivering the click.
     if has_remnawave_link(links):
         return
-    links.append(Link(type=LINK_TYPE_REMNAWAVE))
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": ""}
+    await manager.switch_to(AdminCreateCode.enter_link_name)
+
+
+async def on_link_name_cancel(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop("pending_link", None)
+    await manager.switch_to(AdminCreateCode.enter_links)
+
+
+async def on_link_name_done(name: str, manager: DialogManager) -> None:
+    pending = manager.dialog_data.pop("pending_link", None)
+    if pending is not None:
+        links: list[Link] = manager.dialog_data.setdefault("new_links", [])
+        links.append(Link(type=pending["type"], name=name, url=pending["url"]))
+    await manager.switch_to(AdminCreateCode.enter_links)
 
 
 async def on_undo_last_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -215,6 +241,12 @@ create_code_dialog = Dialog(
         Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
         state=AdminCreateCode.enter_links,
         getter=step_links_getter,
+    ),
+    build_field_window(
+        LINK_NAME_FIELD,
+        AdminCreateCode.enter_link_name,
+        on_link_name_done,
+        Button(I18N("admin-btn-back"), id="link_name_back", on_click=on_link_name_cancel, style=icon("arrow_backward")),
     ),
     build_field_window(
         DESCRIPTION_FIELD,
