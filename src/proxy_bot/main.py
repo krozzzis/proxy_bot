@@ -66,6 +66,8 @@ async def run() -> None:
     dp["remnawave"] = remnawave
     dp["dispatcher"] = dp
     dp["show_traffic_usage"] = config.show_traffic_usage
+    dp["logo_path"] = config.logo_path
+    dp["logo_mode"] = config.logo_mode
 
     i18n_middleware = build_i18n_middleware(config.locales_dir, config.default_locale, storage)
     i18n_middleware.setup(dispatcher=dp)

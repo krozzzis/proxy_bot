@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+_LOGO_MODES = ("before", "caption")
+
 
 @dataclass(frozen=True, slots=True)
 class Config:
@@ -28,6 +30,15 @@ class Config:
     # shown (to users or admins) can leave this unset rather than the bot
     # deciding for them.
     show_traffic_usage: bool
+    # Optional branded logo - unset (default) disables the feature entirely,
+    # same opt-in shape as the Remnawave integration below.
+    logo_path: Path | None
+    # How logo_path is shown, when set:
+    # "before"  - its own plain photo message right before the main menu on
+    #             every /start (mirrors the Liberty VPN bot; default).
+    # "caption" - attached directly to the main menu message itself (photo
+    #             with the menu text as its caption, buttons underneath).
+    logo_mode: str
 
 
 def _require_env(name: str) -> str:
@@ -71,4 +82,16 @@ def load_config() -> Config:
         remnawave_api_url=os.environ.get("REMNAWAVE_API_URL"),
         remnawave_api_token=os.environ.get("REMNAWAVE_API_TOKEN"),
         show_traffic_usage=_bool_env("SHOW_TRAFFIC_USAGE"),
+        logo_path=(Path(os.environ["BRANDED_LOGO_PATH"]) if os.environ.get("BRANDED_LOGO_PATH") else None),
+        logo_mode=_logo_mode_env(),
     )
+
+
+def _logo_mode_env() -> str:
+    value = os.environ.get("BRANDED_LOGO_MODE", "before").strip().lower()
+    if value not in _LOGO_MODES:
+        # A typo here (e.g. "captoin") would otherwise silently fall back to
+        # "before" - wrong mode, no error, nothing in the logs to explain why
+        # the logo isn't showing where the operator configured it to.
+        raise RuntimeError(f"BRANDED_LOGO_MODE must be one of {_LOGO_MODES}, got {value!r}")
+    return value

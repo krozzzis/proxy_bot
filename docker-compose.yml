@@ -24,6 +24,15 @@ services:
       # Off by default - traffic usage is a coarser, more sensitive number
       # than "does this account still have access".
       SHOW_TRAFFIC_USAGE: ${SHOW_TRAFFIC_USAGE:-false}
+      # Optional branded logo. Unset by default (no logo). See
+      # .env.example. Resolved against the container's cwd if relative
+      # (WORKDIR /app per the Dockerfile) - use an absolute path here
+      # (e.g. /app/data/logo.png, landing in the ./data bind mount below)
+      # to not depend on that.
+      BRANDED_LOGO_PATH: ${BRANDED_LOGO_PATH:-}
+      # "before" (own message ahead of the menu) or "caption" (attached to
+      # the menu message itself). See .env.example.
+      BRANDED_LOGO_MODE: ${BRANDED_LOGO_MODE:-before}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

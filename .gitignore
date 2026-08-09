@@ -9,7 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Bot runtime state / secrets - never commit these
+# Bot runtime state / secrets - never commit these (data/ also covers the
+# optional data/logo.png branded-logo asset used by BRANDED_LOGO_PATH)
 .env
 data/
 logs/

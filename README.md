@@ -47,6 +47,8 @@ even before `admins.toml` exists. More admins can be added from the panel.
 | `FSM_BACKEND` | no | `sqlite` | dialog state store: `sqlite` or `redis` |
 | `FSM_SQLITE_PATH` | no | `./data/fsm.sqlite3` | used when `FSM_BACKEND=sqlite` |
 | `REDIS_URL` | if `redis` | — | e.g. `redis://localhost:6379/0` |
+| `BRANDED_LOGO_PATH` | no | — | optional branded logo photo |
+| `BRANDED_LOGO_MODE` | no | `before` | `before` (own message ahead of the menu) or `caption` (attached to the menu message) |
 
 See [`.env.example`](.env.example) for the full, commented list.
 
