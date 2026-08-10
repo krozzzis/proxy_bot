@@ -121,6 +121,37 @@ class CodeRepo:
 
         return await self._file.update(mutate)
 
+    async def set_link_url(self, code: str, index: int, url: str) -> bool:
+        """Replace the URL of the `type == LINK_TYPE_FIX` link at `index`.
+        Callers are responsible for not calling this on a `remnawave`-type
+        entry - its URL is resolved live per holder and isn't stored here
+        (see models.Link)."""
+
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if code not in codes:
+                return False
+            links = _normalize_entry_links(codes[code])
+            if not (0 <= index < len(links)):
+                return False
+            links[index]["url"] = url
+            return True
+
+        return await self._file.update(mutate)
+
+    async def set_link_name(self, code: str, index: int, name: str) -> bool:
+        def mutate(data: dict) -> bool:
+            codes = data.get("codes", {})
+            if code not in codes:
+                return False
+            links = _normalize_entry_links(codes[code])
+            if not (0 <= index < len(links)):
+                return False
+            links[index]["name"] = name
+            return True
+
+        return await self._file.update(mutate)
+
     async def move_link(self, code: str, index: int, offset: int) -> bool:
         """Swap the link at `index` with the one `offset` positions away
         (-1 = up/earlier, +1 = down/later). Returns False if either

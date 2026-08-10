@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Case, Format, List, Multi
+from aiogram_dialog.widgets.text import Case, Format, Multi
 from pydantic import TypeAdapter
 
 from proxy_bot.remnawave import RemnawaveError
@@ -23,7 +23,7 @@ from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .create_code import _CODE_ADAPTER, AdminCreateCode
-from .links_common import has_remnawave_link, link_row
+from .links_common import has_remnawave_link, link_button_label, link_row
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,10 @@ class AdminCodes(StatesGroup):
     list = State()
     detail = State()
     links = State()
+    link_detail = State()
+    add_link_type = State()
     enter_link = State()
+    replace_link = State()
     enter_link_name = State()
     edit_description = State()
     edit_squads = State()
@@ -139,26 +142,89 @@ async def code_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
         return {"found": False}
 
     # Links can be far longer than Telegram's 64-byte callback_data limit,
-    # so the remove/reorder buttons address links by position, not by value.
-    link_items = [{"id": str(idx), "n": idx + 1} for idx in range(len(code.links))]
-    # A link at either end of the list has no "up"/"down" to move to -
-    # trimming these here (rather than showing every button and no-op'ing
-    # out-of-range moves) keeps the boundary from ever needing an error
-    # popup explaining why a tap did nothing.
-    remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
+    # so the select below addresses a link by position, not by value.
+    link_items = [
+        {"id": str(idx), "label": f"{idx + 1}. {link_button_label(link, i18n)}"}
+        for idx, link in enumerate(code.links)
+    ]
     return {
         "found": True,
         "code": esc(code.code),
         "has_links": bool(code.links),
-        "links": [link_row(link, i18n) for link in code.links],
         "link_items": link_items,
-        "up_items": link_items[1:],
-        "down_items": link_items[:-1],
-        "can_add_remnawave_link": remnawave_available and not has_remnawave_link(code.links),
     }
 
 
-async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+async def on_link_selected(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    # item_id is a Select item id echoed back verbatim from callback_data,
+    # not re-validated against the currently rendered link_items by
+    # aiogram_dialog - link_detail_getter re-checks it's still in range.
+    try:
+        index = int(item_id)
+    except ValueError:
+        return
+    manager.dialog_data["edit_link_index"] = index
+    await manager.switch_to(AdminCodes.link_detail)
+
+
+async def link_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    code_id = dialog_manager.dialog_data.get("selected_code")
+    index = dialog_manager.dialog_data.get("edit_link_index")
+    code = await storage.codes.get(code_id) if code_id else None
+
+    if code is None or index is None or not (0 <= index < len(code.links)):
+        return {"found": False}
+
+    link = code.links[index]
+    return {
+        "found": True,
+        "code": esc(code.code),
+        "n": index + 1,
+        "row": link_row(link, i18n),
+        "is_fix": link.type == LINK_TYPE_FIX,
+        "can_move_up": index > 0,
+        "can_move_down": index < len(code.links) - 1,
+    }
+
+
+async def open_replace_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(AdminCodes.replace_link)
+
+
+async def open_rename_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(AdminCodes.enter_link_name)
+
+
+async def _move_selected_link(manager: DialogManager, offset: int) -> None:
+    storage: Storage = manager.middleware_data["storage"]
+    admin = manager.middleware_data["event_from_user"]
+    code_id = manager.dialog_data.get("selected_code")
+    index = manager.dialog_data.get("edit_link_index")
+    if index is None:
+        return
+    if await storage.codes.move_link(code_id, index, offset):
+        # Follow the moved link to its new position, so the submenu keeps
+        # showing the same link the admin was just looking at.
+        manager.dialog_data["edit_link_index"] = index + offset
+        logger.info("%s reordered a link in code %r", actor(admin), code_id)
+
+
+async def on_link_detail_move_up(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    await _move_selected_link(manager, -1)
+
+
+async def on_link_detail_move_down(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+    await _move_selected_link(manager, 1)
+
+
+async def on_delete_current_link(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
@@ -167,53 +233,32 @@ async def on_remove_link(callback: CallbackQuery, _select, manager: DialogManage
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
     code_id = manager.dialog_data.get("selected_code")
-
-    # item_id is a Select item id echoed back verbatim from callback_data,
-    # not re-validated against the currently rendered link_items by
-    # aiogram_dialog - guard the cast rather than assume it's still one of
-    # the positions this window last rendered.
-    try:
-        index = int(item_id)
-    except ValueError:
+    index = manager.dialog_data.get("edit_link_index")
+    if index is None:
         return
-    if not await storage.codes.remove_link_at(code_id, index):
-        return
-    logger.info("%s removed a link from code %r", actor(admin), code_id)
-    await callback.answer(popup_text(i18n, "admin-code-link-removed"))
 
-
-async def _move_link(manager: DialogManager, item_id: str, offset: int) -> None:
-    storage: Storage = manager.middleware_data["storage"]
-    admin = manager.middleware_data["event_from_user"]
-    code_id = manager.dialog_data.get("selected_code")
-
-    # Same "id is an unvalidated echo of the last render" caveat as
-    # on_remove_link - up_items/down_items already exclude the boundary
-    # this offset would run past, but only for the render that produced
-    # this click, not necessarily the current state.
-    try:
-        index = int(item_id)
-    except ValueError:
-        return
-    if await storage.codes.move_link(code_id, index, offset):
-        logger.info("%s reordered a link in code %r", actor(admin), code_id)
-
-
-async def on_move_link_up(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-    await _move_link(manager, item_id, -1)
-
-
-async def on_move_link_down(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-    await _move_link(manager, item_id, 1)
+    if await storage.codes.remove_link_at(code_id, index):
+        logger.info("%s removed a link from code %r", actor(admin), code_id)
+        await callback.answer(popup_text(i18n, "admin-code-link-removed"))
+    await manager.switch_to(AdminCodes.links)
 
 
 async def open_add_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(AdminCodes.add_link_type)
+
+
+async def add_link_type_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    code_id = dialog_manager.dialog_data.get("selected_code")
+    code = await storage.codes.get(code_id) if code_id else None
+    remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
+    return {
+        "found": code is not None,
+        "can_add_remnawave_link": code is not None and remnawave_available and not has_remnawave_link(code.links),
+    }
+
+
+async def open_add_fixed_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     await manager.switch_to(AdminCodes.enter_link)
 
 
@@ -224,6 +269,13 @@ LINK_FIELD = FormField(
     invalid_label="admin-code-add-link-prompt",  # unreachable: a bare str never fails validation
     optional=True,
     default="",
+)
+
+LINK_REPLACE_FIELD = FormField(
+    name="code_link_replace",
+    type_adapter=TypeAdapter(str),
+    prompt="admin-code-replace-link-prompt",
+    invalid_label="admin-code-replace-link-prompt",  # unreachable: a bare str never fails validation
 )
 
 LINK_NAME_FIELD = FormField(
@@ -243,10 +295,36 @@ async def on_link_done(link: str, manager: DialogManager) -> None:
         return
 
     if not link:
-        await manager.switch_to(AdminCodes.links)
+        await manager.switch_to(AdminCodes.add_link_type)
         return
     manager.dialog_data["pending_link"] = {"type": LINK_TYPE_FIX, "url": link}
     await manager.switch_to(AdminCodes.enter_link_name)
+
+
+async def on_replace_link_done(url: str, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    code_id = manager.dialog_data.get("selected_code")
+    index = manager.dialog_data.get("edit_link_index")
+    code = await storage.codes.get(code_id) if code_id else None
+    # `when="is_fix"` already hides the "Replace link" button for a
+    # remnawave-type entry (it has no URL to replace - see models.Link) -
+    # guard here too since aiogram_dialog doesn't re-validate a stale
+    # render against current state before delivering the click.
+    if code is None or index is None or not (0 <= index < len(code.links)) or code.links[index].type != LINK_TYPE_FIX:
+        await manager.switch_to(AdminCodes.link_detail)
+        return
+
+    if await storage.codes.set_link_url(code_id, index, url):
+        i18n = manager.middleware_data["i18n"]
+        bot = manager.middleware_data["bot"]
+        admin = manager.middleware_data["event_from_user"]
+        logger.info("%s replaced a link's URL in code %r", actor(admin), code_id)
+        await bot.send_message(admin.id, i18n.get("admin-code-link-replaced"))
+    await manager.switch_to(AdminCodes.link_detail)
 
 
 async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -268,8 +346,14 @@ async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manag
 
 
 async def on_link_name_cancel(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    manager.dialog_data.pop("pending_link", None)
-    await manager.switch_to(AdminCodes.links)
+    # pending_link is only ever set while adding a new link (and popped the
+    # moment it's consumed - see on_link_name_done) - its presence, not
+    # edit_link_index, is what tells "add" and "rename" apart here, since
+    # edit_link_index legitimately stays set while link_detail is open.
+    if manager.dialog_data.pop("pending_link", None) is not None:
+        await manager.switch_to(AdminCodes.links)
+        return
+    await manager.switch_to(AdminCodes.link_detail)
 
 
 async def on_link_name_done(name: str, manager: DialogManager) -> None:
@@ -287,7 +371,20 @@ async def on_link_name_done(name: str, manager: DialogManager) -> None:
         await storage.codes.add_link(code_id, Link(type=pending["type"], name=name, url=pending["url"]))
         logger.info("%s added a %s link to code %r", actor(admin), pending["type"], code_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
-    await manager.switch_to(AdminCodes.links)
+        await manager.switch_to(AdminCodes.links)
+        return
+
+    index = manager.dialog_data.get("edit_link_index")
+    if index is not None:
+        storage: Storage = manager.middleware_data["storage"]
+        code_id = manager.dialog_data.get("selected_code")
+        if await storage.codes.set_link_name(code_id, index, name):
+            i18n = manager.middleware_data["i18n"]
+            bot = manager.middleware_data["bot"]
+            admin = manager.middleware_data["event_from_user"]
+            logger.info("%s renamed a link in code %r", actor(admin), code_id)
+            await bot.send_message(admin.id, i18n.get("admin-code-link-renamed"))
+    await manager.switch_to(AdminCodes.link_detail)
 
 
 async def open_edit_description(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -559,13 +656,7 @@ codes_dialog = Dialog(
             {
                 True: Multi(
                     I18N("admin-code-links-title", code="{code}"),
-                    Case(
-                        {
-                            True: List(Format("{pos}. {item}"), items="links", sep="\n"),
-                            False: I18N("admin-code-no-links"),
-                        },
-                        selector="has_links",
-                    ),
+                    Case({True: Multi(), False: I18N("admin-code-no-links")}, selector="has_links"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-codes-empty"),
@@ -574,49 +665,89 @@ codes_dialog = Dialog(
         ),
         Column(
             Select(
-                I18N("admin-code-move-link-up-btn", n="{item[n]}"),
-                id="move_link_up_select",
-                item_id_getter=lambda item: item["id"],
-                items="up_items",
-                on_click=on_move_link_up,
-            ),
-        ),
-        Column(
-            Select(
-                I18N("admin-code-move-link-down-btn", n="{item[n]}"),
-                id="move_link_down_select",
-                item_id_getter=lambda item: item["id"],
-                items="down_items",
-                on_click=on_move_link_down,
-            ),
-        ),
-        Column(
-            Select(
-                I18N("admin-code-remove-link-btn", n="{item[n]}"),
-                id="remove_link_select",
+                Format("{item[label]}"),
+                id="link_select",
                 item_id_getter=lambda item: item["id"],
                 items="link_items",
-                on_click=on_remove_link,
-                style=icon("x", ButtonStyle.DANGER),
+                on_click=on_link_selected,
+                style=icon("link"),
             ),
         ),
         Button(I18N("admin-btn-add-link"), id="add_link", on_click=open_add_link, when="found", style=icon("heavy_plus_sign")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail_from_links", state=AdminCodes.detail, style=icon("arrow_backward")),
+        state=AdminCodes.links,
+        getter=code_links_getter,
+    ),
+    Window(
+        Case(
+            {
+                True: I18N("admin-code-add-link-type-prompt"),
+                False: I18N("admin-codes-empty"),
+            },
+            selector="found",
+        ),
         Button(
-            I18N("admin-btn-add-remnawave-link"),
+            I18N("admin-btn-link-type-fix"),
+            id="add_fixed_link",
+            on_click=open_add_fixed_link,
+            when="found",
+            style=icon("link"),
+        ),
+        Button(
+            I18N("admin-btn-link-type-remnawave"),
             id="add_remnawave_link",
             on_click=on_add_remnawave_link,
             when="can_add_remnawave_link",
             style=icon("shield"),
         ),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail_from_links", state=AdminCodes.detail, style=icon("arrow_backward")),
-        state=AdminCodes.links,
-        getter=code_links_getter,
+        SwitchTo(I18N("admin-btn-back"), id="back_to_links_from_add_type", state=AdminCodes.links, style=icon("arrow_backward")),
+        state=AdminCodes.add_link_type,
+        getter=add_link_type_getter,
+    ),
+    Window(
+        Case(
+            {
+                True: Multi(
+                    I18N("admin-code-link-detail-title", code="{code}", n="{n}"),
+                    Format("{row}"),
+                    sep="\n\n",
+                ),
+                False: I18N("admin-codes-empty"),
+            },
+            selector="found",
+        ),
+        Button(
+            I18N("admin-btn-replace-link"),
+            id="replace_link",
+            on_click=open_replace_link,
+            when="is_fix",
+            style=icon("link"),
+        ),
+        Button(I18N("admin-btn-rename-link"), id="rename_link", on_click=open_rename_link, when="found", style=icon("pencil2")),
+        Button(I18N("admin-btn-move-up"), id="move_link_up", on_click=on_link_detail_move_up, when="can_move_up"),
+        Button(I18N("admin-btn-move-down"), id="move_link_down", on_click=on_link_detail_move_down, when="can_move_down"),
+        Button(
+            I18N("admin-btn-delete-link"),
+            id="delete_link",
+            on_click=on_delete_current_link,
+            when="found",
+            style=icon("wastebasket", ButtonStyle.DANGER),
+        ),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_links_from_detail", state=AdminCodes.links, style=icon("arrow_backward")),
+        state=AdminCodes.link_detail,
+        getter=link_detail_getter,
     ),
     build_field_window(
         LINK_FIELD,
         AdminCodes.enter_link,
         on_link_done,
-        SwitchTo(I18N("admin-btn-back"), id="back_to_links", state=AdminCodes.links, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_add_link_type", state=AdminCodes.add_link_type, style=icon("arrow_backward")),
+    ),
+    build_field_window(
+        LINK_REPLACE_FIELD,
+        AdminCodes.replace_link,
+        on_replace_link_done,
+        SwitchTo(I18N("admin-btn-back"), id="back_to_link_detail_from_replace", state=AdminCodes.link_detail, style=icon("arrow_backward")),
     ),
     build_field_window(
         LINK_NAME_FIELD,

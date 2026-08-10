@@ -29,3 +29,26 @@ def link_row(link: Link, i18n) -> str:
     if link.name:
         return i18n.get("admin-code-link-row-named", name=esc(link.name), type=type_label, value=value)
     return i18n.get("admin-code-link-row", type=type_label, value=value)
+
+
+# Telegram button text has no markup, so a value this long would just spill
+# across the keyboard - long enough to still recognize a URL by, short
+# enough to keep the row readable.
+_LINK_BUTTON_URL_MAX = 40
+
+
+def link_button_label(link: Link, i18n) -> str:
+    """Plain-text (no HTML) label for the inline button that opens a link's
+    edit submenu - same fields as link_row, but Telegram button text can't
+    render markup, so no <code> tags and no esc()."""
+    type_label = i18n.get(
+        "admin-code-link-type-remnawave" if link.type == LINK_TYPE_REMNAWAVE else "admin-code-link-type-fix"
+    )
+    if link.name:
+        return f"{link.name} ({type_label})"
+    if link.type == LINK_TYPE_REMNAWAVE:
+        return type_label
+    url = link.url
+    if len(url) > _LINK_BUTTON_URL_MAX:
+        url = url[: _LINK_BUTTON_URL_MAX - 1] + "…"
+    return f"{type_label}: {url}"
