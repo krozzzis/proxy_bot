@@ -8,6 +8,14 @@ services:
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+    # Compose already substitutes ${VAR} placeholders below from .env, but
+    # that only covers the fixed list this file spells out - it won't pass
+    # through a REMNAWAVE_API_URL_<NAME>/REMNAWAVE_API_TOKEN_<NAME> pair for
+    # a server name an operator adds later without editing this file too.
+    # env_file passes .env's contents into the container directly (with
+    # `environment:` below still winning on any key that appears in both),
+    # so an arbitrarily-named new server just needs adding to .env.
+    env_file: .env
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN in .env}
       ROOT_ADMIN_ID: ${ROOT_ADMIN_ID:?Set ROOT_ADMIN_ID in .env}
@@ -17,10 +25,12 @@ services:
       # or "redis" (start with --profile redis, see REDIS_URL below).
       FSM_BACKEND: ${FSM_BACKEND:-sqlite}
       REDIS_URL: ${REDIS_URL:-}
-      # Optional: enables Remnawave panel sync (squad membership on code
-      # grant/revoke). Leave unset to disable the integration entirely.
-      REMNAWAVE_API_URL: ${REMNAWAVE_API_URL:-}
-      REMNAWAVE_API_TOKEN: ${REMNAWAVE_API_TOKEN:-}
+      # Remnawave panel integration (bot-admin Squads, per-user account
+      # provisioning) - optional, off unless at least one
+      # REMNAWAVE_API_URL_<NAME>/REMNAWAVE_API_TOKEN_<NAME> pair is set in
+      # .env (see .env.example). Passed through via env_file above, not
+      # listed here individually - server names are operator-chosen, not
+      # fixed by this file.
       # Off by default - traffic usage is a coarser, more sensitive number
       # than "does this account still have access".
       SHOW_TRAFFIC_USAGE: ${SHOW_TRAFFIC_USAGE:-false}

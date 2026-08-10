@@ -7,12 +7,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, List, Multi
 from pydantic import StringConstraints, TypeAdapter
 
-from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.storage import Storage
 from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, parse_link
 from proxy_bot.utils.audit import actor
@@ -22,19 +21,17 @@ from ..common import icon, not_a_command
 from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
-from .links_common import has_remnawave_link, link_row
+from .links_common import available_squads, link_row
 
 logger = logging.getLogger(__name__)
-
-_SQUADS_SELECT_ID = "cc_squads_select"
 
 
 class AdminCreateCode(StatesGroup):
     enter_code = State()
     enter_links = State()
+    choose_link_squad = State()
     enter_link_name = State()
     enter_description = State()
-    enter_squads = State()
 
 
 _CANCEL_STYLE = icon("x", ButtonStyle.DANGER)
@@ -90,13 +87,19 @@ async def step_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
     # instances - dialog_data gets JSON-serialized by this project's FSM
     # storage (see fsm/sqlite_storage.py), which a raw dataclass instance
     # can't survive.
+    storage: Storage = dialog_manager.middleware_data["storage"]
     links = [parse_link(raw) for raw in dialog_manager.dialog_data.get("new_links", [])]
-    remnawave_configured = dialog_manager.middleware_data.get("remnawave") is not None
+    all_squads = await storage.squads.all()
+    squads_by_id = {s.id: s for s in all_squads}
+    rows = [
+        link_row(link, i18n, squads_by_id[link.squad_id].name if link.squad_id in squads_by_id else None)
+        for link in links
+    ]
     return {
         "has_links": bool(links),
         "count": len(links),
-        "rows": [link_row(link, i18n) for link in links],
-        "can_add_remnawave": remnawave_configured and not has_remnawave_link(links),
+        "rows": rows,
+        "can_add_remnawave": bool(available_squads(all_squads, links)),
     }
 
 
@@ -113,14 +116,30 @@ async def on_link_added(message: Message, widget: ManagedTextInput, manager: Dia
     await manager.switch_to(AdminCreateCode.enter_link_name)
 
 
-async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+async def on_open_choose_link_squad(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    storage: Storage = manager.middleware_data["storage"]
     links = [parse_link(raw) for raw in manager.dialog_data.get("new_links", [])]
-    # `when="can_add_remnawave"` already hides the button once one exists -
-    # guard here too since aiogram_dialog doesn't re-validate a stale
-    # render against current state before delivering the click.
-    if has_remnawave_link(links):
+    # `when="can_add_remnawave"` already hides the button once no Squad is
+    # left to attach - guard here too since aiogram_dialog doesn't
+    # re-validate a stale render against current state before delivering
+    # the click.
+    if not available_squads(await storage.squads.all(), links):
         return
-    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": ""}
+    await manager.switch_to(AdminCreateCode.choose_link_squad)
+
+
+async def choose_link_squad_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    links = [parse_link(raw) for raw in dialog_manager.dialog_data.get("new_links", [])]
+    squads = available_squads(await storage.squads.all(), links)
+    return {
+        "has_available_squads": bool(squads),
+        "squads": [{"id": s.id, "name": esc(s.name)} for s in squads],
+    }
+
+
+async def on_link_squad_chosen(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": "", "squad_id": item_id}
     await manager.switch_to(AdminCreateCode.enter_link_name)
 
 
@@ -134,7 +153,9 @@ async def on_link_name_done(name: str, manager: DialogManager) -> None:
     if pending is not None:
         # A plain dict, not a Link instance - see step_links_getter.
         links: list[dict] = manager.dialog_data.setdefault("new_links", [])
-        links.append({"type": pending["type"], "name": name, "url": pending["url"]})
+        links.append(
+            {"type": pending["type"], "name": name, "url": pending["url"], "squad_id": pending.get("squad_id", "")}
+        )
     await manager.switch_to(AdminCreateCode.enter_links)
 
 
@@ -158,23 +179,15 @@ async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
         await leave_admin_area(manager)
 
 
-async def _finalize_creation(manager: DialogManager, squads: list[str]) -> None:
+async def _finalize_creation(manager: DialogManager) -> None:
     storage: Storage = manager.middleware_data["storage"]
     user = manager.middleware_data["event_from_user"]
 
     code = manager.dialog_data["new_code"]
     links = [parse_link(raw) for raw in manager.dialog_data.get("new_links", [])]
     description = manager.dialog_data.get("new_description", "")
-    await storage.codes.create(
-        code=code, links=links, description=description, created_by=user.id, remnawave_squads=squads
-    )
-    logger.info(
-        "%s created code %r with %d link(s) and %d remnawave squad(s)",
-        actor(user),
-        code,
-        len(links),
-        len(squads),
-    )
+    await storage.codes.create(code=code, links=links, description=description, created_by=user.id)
+    logger.info("%s created code %r with %d link(s)", actor(user), code, len(links))
 
     # Handed to the admin menu's on_process_result, so the confirmation
     # renders as part of that same re-render instead of a message of its
@@ -189,37 +202,7 @@ async def on_description_done(description: str, manager: DialogManager) -> None:
         return
 
     manager.dialog_data["new_description"] = description
-    remnawave = manager.middleware_data.get("remnawave")
-    if remnawave is None:
-        # Feature not configured for this deployment - skip straight to a
-        # plain fixed-link code, same as before this feature existed.
-        await _finalize_creation(manager, [])
-        return
-    await manager.next()
-
-
-async def enter_squads_getter(dialog_manager: DialogManager, **kwargs) -> dict:
-    remnawave = dialog_manager.middleware_data.get("remnawave")
-    squads = []
-    if remnawave is not None:
-        try:
-            squads = await remnawave.list_internal_squads()
-        except RemnawaveError:
-            logger.warning("Failed to list Remnawave squads", exc_info=True)
-    return {
-        "has_squads": bool(squads),
-        "squads": [{"id": s.uuid, "name": esc(s.name)} for s in squads],
-    }
-
-
-async def on_squads_done(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-
-    multiselect = manager.find(_SQUADS_SELECT_ID)
-    squads = multiselect.get_checked() if multiselect is not None else []
-    await _finalize_creation(manager, squads)
+    await _finalize_creation(manager)
 
 
 create_code_dialog = Dialog(
@@ -241,7 +224,7 @@ create_code_dialog = Dialog(
         Button(
             I18N("admin-btn-add-remnawave-link"),
             id="add_remnawave_link",
-            on_click=on_add_remnawave_link,
+            on_click=on_open_choose_link_squad,
             when="can_add_remnawave",
             style=icon("shield"),
         ),
@@ -250,6 +233,30 @@ create_code_dialog = Dialog(
         Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
         state=AdminCreateCode.enter_links,
         getter=step_links_getter,
+    ),
+    Window(
+        Case(
+            {
+                True: I18N("admin-create-code-choose-squad-prompt"),
+                False: I18N("admin-create-code-squads-empty"),
+            },
+            selector="has_available_squads",
+        ),
+        Column(
+            Select(
+                I18N("admin-create-code-squad-item", name="{item[name]}"),
+                id="cc_squad_select",
+                item_id_getter=lambda item: item["id"],
+                items="squads",
+                on_click=on_link_squad_chosen,
+                style=icon("shield"),
+            ),
+        ),
+        SwitchTo(
+            I18N("admin-btn-back"), id="back_to_links_from_squad", state=AdminCreateCode.enter_links, style=icon("arrow_backward")
+        ),
+        state=AdminCreateCode.choose_link_squad,
+        getter=choose_link_squad_getter,
     ),
     build_field_window(
         LINK_NAME_FIELD,
@@ -262,30 +269,6 @@ create_code_dialog = Dialog(
         AdminCreateCode.enter_description,
         on_description_done,
         Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
-    ),
-    Window(
-        Case(
-            {
-                True: I18N("admin-create-code-prompt-squads"),
-                False: I18N("admin-create-code-squads-empty"),
-            },
-            selector="has_squads",
-        ),
-        Column(
-            Multiselect(
-                I18N("admin-create-code-squad-item", name="{item[name]}"),
-                I18N("admin-create-code-squad-item", name="{item[name]}"),
-                id=_SQUADS_SELECT_ID,
-                item_id_getter=lambda item: item["id"],
-                items="squads",
-                checked_style=icon("check"),
-                unchecked_style=icon("shield"),
-            ),
-        ),
-        Button(I18N("admin-btn-done"), id="squads_done", on_click=on_squads_done, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-        Cancel(I18N("admin-btn-cancel"), style=_CANCEL_STYLE),
-        state=AdminCreateCode.enter_squads,
-        getter=enter_squads_getter,
     ),
     on_start=on_dialog_start,
 )

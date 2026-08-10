@@ -1,3 +1,3 @@
-from .client import RemnawaveClient, RemnawaveError, RemnawaveUser, Squad
+from .client import InternalSquad, RemnawaveClient, RemnawaveError, RemnawaveRegistry, RemnawaveUser
 
-__all__ = ["RemnawaveClient", "RemnawaveError", "RemnawaveUser", "Squad"]
+__all__ = ["InternalSquad", "RemnawaveClient", "RemnawaveError", "RemnawaveRegistry", "RemnawaveUser"]

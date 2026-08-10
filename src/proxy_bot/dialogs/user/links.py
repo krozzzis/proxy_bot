@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 
 from proxy_bot.storage import Storage
-from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Code, User
+from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Code, RemnawaveAccount, User
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
@@ -56,50 +56,86 @@ async def on_enter_code_result(_start_data: object, result: object, manager: Dia
         manager.dialog_data["banner"] = result["banner"]
 
 
-def _resolve_link_entries(
-    code_record: Code, db_user: User, remnawave_active: bool, subscription_info: dict[str, str] | None
-) -> list[tuple[str, str]]:
-    """Each of `code_record.links`, in list order, as a `(name, url)` pair
-    ready for format_links() - a `remnawave` entry resolves to the holder's
-    live subscription URL and is dropped entirely (not rendered with a
-    blank url) when there's nothing to point it at: Remnawave inactive for
-    this code/user, no linked account, or subscription_info came back None
-    (see fetch_subscription_lines - unlinked, or a panel error).
-    """
-    entries = []
-    for link in code_record.links:
-        if link.type == LINK_TYPE_FIX:
-            entries.append((link.name, link.url))
-        elif remnawave_active and subscription_info is not None and db_user.remnawave_subscription_url:
-            entries.append((link.name, db_user.remnawave_subscription_url))
-    return entries
+async def _remnawave_target(storage: Storage, db_user: User, squad_id: str) -> tuple[str, RemnawaveAccount] | None:
+    """The (server, account) a `remnawave`-type link's `squad_id` resolves
+    to for this holder - None if there's nothing to point at: no
+    `squad_id`, a since-deleted Squad, or no account on that Squad's
+    server yet (see storage.models.Link)."""
+    if not squad_id:
+        return None
+    squad = await storage.squads.get(squad_id)
+    if squad is None:
+        return None
+    account = db_user.remnawave_accounts.get(squad.server)
+    if account is None or not account.subscription_url:
+        return None
+    return squad.server, account
 
 
-async def _build_detail(
-    db_user: User, code_record: Code, subscription_info: dict[str, str] | None
-) -> dict[str, str]:
+async def _build_detail(dialog_manager: DialogManager, db_user: User, code_record: Code, i18n) -> dict[str, str]:
     # An admin's remnawave_disabled override (per-code or per-user) hides
-    # the Remnawave link/expiry/traffic here even though the account itself
-    # (and its squad grant, if any) is left untouched - see
-    # services.remnawave_sync.compute_remnawave_squads.
+    # every Remnawave link/expiry/traffic here even though the underlying
+    # accounts (and their squad grants, if any) are left untouched - see
+    # services.remnawave_sync.compute_remnawave_grants.
     remnawave_active = not code_record.remnawave_disabled and not db_user.remnawave_disabled
-    has_remnawave_link = any(link.type == LINK_TYPE_REMNAWAVE for link in code_record.links)
-    has_remnawave = has_remnawave_link and remnawave_active and subscription_info is not None
-    entries = _resolve_link_entries(code_record, db_user, remnawave_active, subscription_info)
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    remnawave = dialog_manager.middleware_data.get("remnawave")
+    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
+
+    # Resolve each remnawave-type link's target up front - a code can now
+    # carry several, each attached to its own Squad (possibly on a
+    # different server), so each one may point at a different holder
+    # account.
+    targets: dict[int, tuple[str, RemnawaveAccount]] = {}
+    if remnawave_active and remnawave is not None:
+        for idx, link in enumerate(code_record.links):
+            if link.type != LINK_TYPE_REMNAWAVE:
+                continue
+            target = await _remnawave_target(storage, db_user, link.squad_id)
+            if target is not None:
+                targets[idx] = target
+
+    # Confirmed UX: at most one distinct account among this code's
+    # remnawave links (the common case - one server, or several Squads on
+    # the same server) keeps the old single aggregated expiry/traffic
+    # block. Two or more distinct accounts means no single "the" expiry to
+    # show up top - each link instead carries its own expiry inline (see
+    # format_links's `suffix`), and traffic is dropped entirely rather than
+    # picking one account's number to represent all of them.
+    distinct_servers = {server for server, _ in targets.values()}
+    aggregate_mode = len(distinct_servers) <= 1
+
+    aggregate_info: dict[str, str] | None = None
+    if aggregate_mode and targets:
+        server, account = next(iter(targets.values()))
+        aggregate_info = await fetch_subscription_lines(remnawave.get(server), account.uuid, i18n, show_traffic=show_traffic)
+
+    entries: list[tuple[str, str, str]] = []
+    for idx, link in enumerate(code_record.links):
+        if link.type == LINK_TYPE_FIX:
+            entries.append((link.name, link.url, ""))
+            continue
+        target = targets.get(idx)
+        if target is None:
+            continue
+        server, account = target
+        suffix = ""
+        if not aggregate_mode:
+            # Traffic stays aggregate-only per the confirmed UX - only the
+            # expiry line is worth repeating per link.
+            info = await fetch_subscription_lines(remnawave.get(server), account.uuid, i18n, show_traffic=False)
+            suffix = info["expiry"] if info else ""
+        entries.append((link.name, account.subscription_url, suffix))
+
+    show_aggregate = aggregate_mode and aggregate_info is not None
     return {
         "code": esc(code_record.code),
         "description": esc(code_record.description or code_record.code),
         "links": format_links(entries),
-        "expiry": subscription_info["expiry"] if has_remnawave else "",
-        "traffic": subscription_info["traffic"] if has_remnawave else "",
+        "expiry": aggregate_info["expiry"] if show_aggregate else "",
+        "traffic": aggregate_info["traffic"] if show_aggregate else "",
         "banned": db_user.banned,
     }
-
-
-async def _subscription_info(dialog_manager: DialogManager, db_user: User, i18n) -> dict[str, str] | None:
-    remnawave = dialog_manager.middleware_data.get("remnawave")
-    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
-    return await fetch_subscription_lines(remnawave, db_user.remnawave_uuid, i18n, show_traffic=show_traffic)
 
 
 async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
@@ -124,8 +160,7 @@ async def links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     }
 
     if len(code_records) == 1:
-        subscription_info = await _subscription_info(dialog_manager, db_user, i18n)
-        base.update(await _build_detail(db_user, code_records[0], subscription_info))
+        base.update(await _build_detail(dialog_manager, db_user, code_records[0], i18n))
     elif code_records:
         base["codes"] = [{"id": cr.code, "code": esc(cr.code)} for cr in code_records]
 
@@ -146,8 +181,7 @@ async def detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
         await dialog_manager.switch_to(Links.main)
         return {"code": "", "description": "", "links": "", "expiry": "", "traffic": "", "banned": False}
 
-    subscription_info = await _subscription_info(dialog_manager, db_user, i18n)
-    return await _build_detail(db_user, code_record, subscription_info)
+    return await _build_detail(dialog_manager, db_user, code_record, i18n)
 
 
 async def open_enter_code(_callback, _button, manager: DialogManager) -> None:

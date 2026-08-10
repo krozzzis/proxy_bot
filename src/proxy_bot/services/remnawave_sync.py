@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from proxy_bot.remnawave import RemnawaveClient, RemnawaveError, RemnawaveUser
+from proxy_bot.remnawave import RemnawaveClient, RemnawaveError, RemnawaveRegistry, RemnawaveUser
 from proxy_bot.storage import Storage, User
+from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
 from proxy_bot.utils.audit import actor_id
 
 logger = logging.getLogger(__name__)
@@ -23,30 +24,42 @@ async def _create_account(remnawave: RemnawaveClient, db_user: User, squads: lis
     return await remnawave.create_user(username=candidates[-1], telegram_id=db_user.user_id, squads=squads)
 
 
-async def compute_remnawave_squads(storage: Storage, db_user: User) -> list[str]:
-    """The union of `remnawave_squads` across every code `db_user` currently
-    holds - empty if the user's own `remnawave_disabled` override is set
-    (regardless of what their codes would otherwise grant), and a code's
-    contribution is skipped entirely if that code's own `remnawave_disabled`
-    is set."""
+async def compute_remnawave_grants(storage: Storage, db_user: User) -> dict[str, list[str]]:
+    """The internal-squad UUIDs to grant on each Remnawave server, grouped
+    by server name - the union of Squad.internal_squad_uuids across every
+    `remnawave`-type link in every code `db_user` currently holds, keyed by
+    each Squad's own `server`. Empty if the user's own `remnawave_disabled`
+    override is set (regardless of what their codes would otherwise grant),
+    and a code's contribution is skipped entirely if that code's own
+    `remnawave_disabled` is set. A link's `squad_id` pointing at a
+    since-deleted Squad is skipped silently - same as any other "nothing to
+    point at" dangling reference.
+    """
     if db_user.remnawave_disabled:
-        return []
+        return {}
 
-    squads: set[str] = set()
+    grants: dict[str, set[str]] = {}
     for code in db_user.codes:
         code_record = await storage.codes.get(code)
-        if code_record is not None and not code_record.remnawave_disabled:
-            squads.update(code_record.remnawave_squads)
-    return sorted(squads)
+        if code_record is None or code_record.remnawave_disabled:
+            continue
+        for link in code_record.links:
+            if link.type != LINK_TYPE_REMNAWAVE or not link.squad_id:
+                continue
+            squad = await storage.squads.get(link.squad_id)
+            if squad is None:
+                continue
+            grants.setdefault(squad.server, set()).update(squad.internal_squad_uuids)
+    return {server: sorted(uuids) for server, uuids in grants.items()}
 
 
-async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | None, user_id: int) -> None:
-    """Recompute this user's Remnawave squad membership from
-    compute_remnawave_squads(), provisioning (or re-linking) their account
-    on first grant. Call after any code grant/revoke, or after either
-    remnawave_disabled override changes. No-ops if Remnawave isn't
-    configured; swallows API errors so a panel hiccup never blocks a local
-    code grant/revoke.
+async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveRegistry | None, user_id: int) -> None:
+    """Recompute this user's Remnawave squad membership, per server, from
+    compute_remnawave_grants(), provisioning (or re-linking) an account on
+    first grant for a server. Call after any code grant/revoke, or after
+    either remnawave_disabled override changes. No-ops if Remnawave isn't
+    configured; swallows API errors per-server so one panel's hiccup never
+    blocks a local code grant/revoke or another server's sync.
     """
     if remnawave is None:
         return
@@ -55,56 +68,94 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveClient | N
     if db_user is None:
         return
 
-    squad_list = await compute_remnawave_squads(storage, db_user)
+    grants = await compute_remnawave_grants(storage, db_user)
+    # The union, not just servers with a grant: a server whose grant just
+    # dropped to nothing but still has a live account needs
+    # update_user_squads(uuid, []) too, or the panel-side membership goes
+    # stale instead of following the revoke.
+    servers = set(grants) | set(db_user.remnawave_accounts)
 
-    if not squad_list and not db_user.remnawave_uuid:
-        return
+    for server in servers:
+        client = remnawave.get(server)
+        if client is None:
+            # Server removed from config since the account was created -
+            # nothing to sync against; leave the stored account alone.
+            continue
 
-    try:
-        if db_user.remnawave_uuid:
-            await remnawave.update_user_squads(db_user.remnawave_uuid, squad_list)
-            return
+        squad_list = grants.get(server, [])
+        account = db_user.remnawave_accounts.get(server)
+        if not squad_list and account is None:
+            continue
 
-        rw_user = await remnawave.get_user_by_telegram_id(user_id)
-        if rw_user is None:
-            rw_user = await _create_account(remnawave, db_user, squad_list)
-        else:
-            await remnawave.update_user_squads(rw_user.uuid, squad_list)
-        await storage.users.set_remnawave_account(user_id, rw_user.uuid, rw_user.subscription_url, rw_user.username, manual=False)
-    except RemnawaveError:
-        logger.warning(
-            "Remnawave sync failed for %s", actor_id(user_id, db_user.username), exc_info=True
-        )
+        try:
+            if account is not None and account.uuid:
+                await client.update_user_squads(account.uuid, squad_list)
+                continue
+
+            rw_user = await client.get_user_by_telegram_id(user_id)
+            if rw_user is None:
+                if not squad_list:
+                    continue
+                rw_user = await _create_account(client, db_user, squad_list)
+            else:
+                await client.update_user_squads(rw_user.uuid, squad_list)
+            await storage.users.set_remnawave_account(
+                user_id, server, rw_user.uuid, rw_user.subscription_url, rw_user.username, manual=False
+            )
+        except RemnawaveError:
+            logger.warning(
+                "Remnawave sync failed for %s on server %r", actor_id(user_id, db_user.username), server, exc_info=True
+            )
 
 
-async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveClient, db_user: User) -> None:
-    """The pull direction of ban/unban sync: if `db_user`'s linked account
-    was disabled or re-enabled directly on the Remnawave panel (not through
-    this bot), reflect that into the local `banned` flag. The push
+async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveRegistry, db_user: User) -> None:
+    """The pull direction of ban/unban sync: if any of `db_user`'s linked
+    accounts was disabled or re-enabled directly on a Remnawave panel (not
+    through this bot), reflect that into the local `banned` flag. The push
     direction - this bot's own ban/unban toggle - takes effect immediately
     at the point of action instead (dialogs.admin.users.on_toggle_ban), so
     this only ever needs to catch a change the bot didn't make itself.
 
-    Only an ACTIVE/DISABLED status is treated as a ban-state signal; every
-    other panel status (expired, traffic-limited, ...) is left alone rather
-    than misread as an admin's decision. Refuses to ban a fellow admin
-    through this path, mirroring on_toggle_ban's own guard - unlike that
-    handler, there's no admin present to show a popup to, so this just logs
-    and leaves the local flag untouched.
+    Only an ACTIVE/DISABLED status is treated as a ban-state signal from a
+    given account; every other panel status (expired, traffic-limited, ...)
+    is left alone. With accounts on several servers, this mirrors into
+    `banned` only when every account with a meaningful status agrees -
+    disagreement is logged and left untouched rather than picking a side,
+    since "banned" is a single flag with no per-server meaning. Refuses to
+    ban a fellow admin through this path, mirroring on_toggle_ban's own
+    guard - unlike that handler, there's no admin present to show a popup
+    to, so this just logs and leaves the local flag untouched.
     """
-    if not db_user.remnawave_uuid:
+    statuses: set[bool] = set()
+    for server, account in db_user.remnawave_accounts.items():
+        if not account.uuid:
+            continue
+        client = remnawave.get(server)
+        if client is None:
+            continue
+        try:
+            rw_user = await client.get_user_by_uuid(account.uuid)
+        except RemnawaveError:
+            logger.warning(
+                "Failed to fetch Remnawave status for %s on server %r",
+                actor_id(db_user.user_id, db_user.username),
+                server,
+                exc_info=True,
+            )
+            continue
+        if rw_user is not None and rw_user.status in ("ACTIVE", "DISABLED"):
+            statuses.add(rw_user.status == "DISABLED")
+
+    if not statuses:
         return
-    try:
-        rw_user = await remnawave.get_user_by_uuid(db_user.remnawave_uuid)
-    except RemnawaveError:
+    if len(statuses) > 1:
         logger.warning(
-            "Failed to fetch Remnawave status for %s", actor_id(db_user.user_id, db_user.username), exc_info=True
+            "%s has disagreeing ban state across Remnawave servers - leaving local state untouched",
+            actor_id(db_user.user_id, db_user.username),
         )
         return
-    if rw_user is None or rw_user.status not in ("ACTIVE", "DISABLED"):
-        return
 
-    remote_banned = rw_user.status == "DISABLED"
+    (remote_banned,) = statuses
     if remote_banned == db_user.banned:
         return
     if remote_banned and await storage.admins.is_admin(db_user.user_id):
@@ -122,7 +173,7 @@ async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveCl
     )
 
 
-async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveClient | None, interval: float = 300.0) -> None:
+async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveRegistry | None, interval: float = 300.0) -> None:
     """Periodic sweep for the pull direction of ban-state sync (see
     sync_ban_state_from_remnawave): every Remnawave-linked user's panel
     status is checked, and the local `banned` flag updated to match if it
@@ -134,7 +185,7 @@ async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveClient | 
         return
     while True:
         for db_user in await storage.users.all():
-            if db_user.remnawave_uuid:
+            if db_user.remnawave_accounts:
                 await sync_ban_state_from_remnawave(storage, remnawave, db_user)
         await asyncio.sleep(interval)
 
@@ -143,10 +194,11 @@ async def retire_auto_provisioned_account(
     remnawave: RemnawaveClient | None, db_user: User, keep_uuid: str
 ) -> str | None:
     """Clean up the account this user would have gotten from `_create_account`
-    (the `tg_<telegram_username>` naming convention) once an admin force-links
-    a *different* Remnawave account to them - without this, they end up with
-    two live accounts and two subscription URLs, only one of which the bot
-    now points at.
+    (the `tg_<telegram_username>` naming convention) on the same server as
+    `remnawave`, once an admin force-links a *different* Remnawave account
+    to them on that server - without this, they end up with two live
+    accounts and two subscription URLs on that panel, only one of which the
+    bot now points at.
 
     Disables rather than deletes an account that's actually been used
     (`used_traffic_bytes > 0`) - discarding real traffic history isn't this
@@ -154,8 +206,8 @@ async def retire_auto_provisioned_account(
     that was provisioned and never connected, since there's nothing there to
     lose. Returns "disabled", "deleted", or None if there was nothing to do
     (no Telegram username to derive the auto account's name from, no such
-    account on the panel, or it turned out to already be the account being
-    kept).
+    account on that server's panel, or it turned out to already be the
+    account being kept).
     """
     if remnawave is None or not db_user.username:
         return None

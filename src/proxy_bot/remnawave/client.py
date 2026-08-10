@@ -19,7 +19,7 @@ class RemnawaveError(RuntimeError):
 
 
 @dataclass
-class Squad:
+class InternalSquad:
     uuid: str
     name: str
 
@@ -88,9 +88,9 @@ class RemnawaveClient:
             )
         return response.json()
 
-    async def list_internal_squads(self) -> list[Squad]:
+    async def list_internal_squads(self) -> list[InternalSquad]:
         data = await self._request("GET", "/api/internal-squads")
-        return [Squad(uuid=s["uuid"], name=s["name"]) for s in data["response"]["internalSquads"]]
+        return [InternalSquad(uuid=s["uuid"], name=s["name"]) for s in data["response"]["internalSquads"]]
 
     async def get_user_by_telegram_id(self, telegram_id: int) -> RemnawaveUser | None:
         data = await self._request("GET", f"/api/users/by-telegram-id/{telegram_id}")
@@ -153,3 +153,25 @@ class RemnawaveClient:
 
     async def delete_user(self, uuid: str) -> None:
         await self._request("DELETE", f"/api/users/{uuid}")
+
+
+class RemnawaveRegistry:
+    """One RemnawaveClient per configured panel, keyed by (lowercased)
+    server name - see config.Config.remnawave_servers. Callers that already
+    know which server they're dealing with (a Squad's `server`, or a key in
+    User.remnawave_accounts) go through .get(); .names() lists what's
+    configured, for UI that needs to offer a server choice or fall back to
+    the sole one."""
+
+    def __init__(self, clients: dict[str, RemnawaveClient]) -> None:
+        self._clients = clients
+
+    def get(self, server: str) -> RemnawaveClient | None:
+        return self._clients.get(server)
+
+    def names(self) -> list[str]:
+        return list(self._clients)
+
+    async def close_all(self) -> None:
+        for client in self._clients.values():
+            await client.close()

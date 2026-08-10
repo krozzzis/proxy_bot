@@ -13,18 +13,14 @@ def _now() -> str:
 
 def _normalize_entry_links(entry: dict) -> list[dict]:
     """Rewrite `entry["links"]` in place to the canonical list-of-dict shape
-    (migrating legacy bare-string links and synthesizing a `remnawave`-type
-    entry per models.parse_links, if `remnawave_squads` calls for one) and
-    return it.
+    (migrating legacy bare-string links per models.parse_links) and return
+    it.
 
     Every mutator below that indexes into `links` calls this first, so it
     operates on - and persists - the exact same shape `CodeRepo.get`/`all`
-    would produce in memory from this entry (see models.Code.from_raw). That
-    keeps positions in sync: without this, a link synthesized only in
-    memory on read would shift every later index that
-    remove_link_at/move_link addresses by position.
+    would produce in memory from this entry (see models.Code.from_raw).
     """
-    links = parse_links(entry.get("links", []), entry.get("remnawave_squads", []))
+    links = parse_links(entry.get("links", []))
     entry["links"] = [dump_link(link) for link in links]
     return entry["links"]
 
@@ -53,7 +49,6 @@ class CodeRepo:
         links: list[Link],
         description: str,
         created_by: int,
-        remnawave_squads: list[str] | None = None,
     ) -> Code | None:
         """Create a new code. Returns None if the code already exists."""
 
@@ -67,7 +62,6 @@ class CodeRepo:
                 "created_by": created_by,
                 "created_at": _now(),
                 "active": True,
-                "remnawave_squads": list(remnawave_squads or []),
             }
             _normalize_entry_links(codes[code])
             return Code.from_raw(code, codes[code])
@@ -177,20 +171,6 @@ class CodeRepo:
             if code not in codes:
                 return False
             codes[code]["description"] = description
-            return True
-
-        return await self._file.update(mutate)
-
-    async def set_remnawave_squads(self, code: str, squads: list[str]) -> bool:
-        def mutate(data: dict) -> bool:
-            codes = data.get("codes", {})
-            if code not in codes:
-                return False
-            codes[code]["remnawave_squads"] = list(squads)
-            # A code that just gained squads but has no `remnawave`-type
-            # link entry yet would otherwise grant access with nothing in
-            # "my subscriptions" pointing at it - see models.parse_links.
-            _normalize_entry_links(codes[code])
             return True
 
         return await self._file.update(mutate)

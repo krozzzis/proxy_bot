@@ -5,12 +5,11 @@ import logging
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
-from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Multiselect, Row, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 from pydantic import TypeAdapter
 
-from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Link
@@ -23,11 +22,9 @@ from ..forms import FormField, build_field_window
 from ..widgets import I18N
 from .access import ensure_admin, leave_admin_area
 from .create_code import _CODE_ADAPTER, AdminCreateCode
-from .links_common import has_remnawave_link, link_button_label, link_row
+from .links_common import available_squads, link_button_label, link_row
 
 logger = logging.getLogger(__name__)
-
-_CODE_SQUADS_SELECT_ID = "code_squads_select"
 
 # Same pattern as dialogs.admin.users._REMNAWAVE_TOGGLE_STYLE.
 _REMNAWAVE_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="remnawave_not_disabled") | icon(
@@ -47,10 +44,10 @@ class AdminCodes(StatesGroup):
     link_detail = State()
     add_link_type = State()
     enter_link = State()
+    choose_link_squad = State()
     replace_link = State()
     enter_link_name = State()
     edit_description = State()
-    edit_squads = State()
     edit_code = State()
 
 PAGE_SIZE = 8
@@ -122,8 +119,6 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
         "description": esc(code.description or "—"),
         "links_count": len(code.links),
         "remnawave_available": remnawave_available,
-        "has_squads": bool(code.remnawave_squads),
-        "squad_count": len(code.remnawave_squads),
         "remnawave_disabled": code.remnawave_disabled,
         "remnawave_not_disabled": not code.remnawave_disabled,
     }
@@ -131,6 +126,13 @@ async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
 
 async def open_links_menu(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     await manager.switch_to(AdminCodes.links)
+
+
+async def _squad_name(storage: Storage, squad_id: str) -> str | None:
+    if not squad_id:
+        return None
+    squad = await storage.squads.get(squad_id)
+    return squad.name if squad is not None else None
 
 
 async def code_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
@@ -144,7 +146,10 @@ async def code_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> di
     # Links can be far longer than Telegram's 64-byte callback_data limit,
     # so the select below addresses a link by position, not by value.
     link_items = [
-        {"id": str(idx), "label": f"{idx + 1}. {link_button_label(link, i18n)}"}
+        {
+            "id": str(idx),
+            "label": f"{idx + 1}. {link_button_label(link, i18n, await _squad_name(storage, link.squad_id))}",
+        }
         for idx, link in enumerate(code.links)
     ]
     return {
@@ -181,7 +186,7 @@ async def link_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> d
         "found": True,
         "code": esc(code.code),
         "n": index + 1,
-        "row": link_row(link, i18n),
+        "row": link_row(link, i18n, await _squad_name(storage, link.squad_id)),
         "is_fix": link.type == LINK_TYPE_FIX,
         "can_move_up": index > 0,
         "can_move_down": index < len(code.links) - 1,
@@ -237,8 +242,18 @@ async def on_delete_current_link(callback: CallbackQuery, _button: Button, manag
     if index is None:
         return
 
+    code = await storage.codes.get(code_id)
+    was_remnawave = code is not None and 0 <= index < len(code.links) and code.links[index].type == LINK_TYPE_REMNAWAVE
+
     if await storage.codes.remove_link_at(code_id, index):
         logger.info("%s removed a link from code %r", actor(admin), code_id)
+        if was_remnawave:
+            # A removed remnawave link stops granting its Squad - resync
+            # every current holder now instead of waiting for each one's
+            # next unrelated code grant/revoke.
+            remnawave = manager.middleware_data.get("remnawave")
+            for holder in await storage.users.users_with_code(code_id):
+                await sync_remnawave_access(storage, remnawave, holder.user_id)
         await callback.answer(popup_text(i18n, "admin-code-link-removed"))
     await manager.switch_to(AdminCodes.links)
 
@@ -251,10 +266,10 @@ async def add_link_type_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     code_id = dialog_manager.dialog_data.get("selected_code")
     code = await storage.codes.get(code_id) if code_id else None
-    remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
+    can_add_remnawave_link = code is not None and bool(available_squads(await storage.squads.all(), code.links))
     return {
         "found": code is not None,
-        "can_add_remnawave_link": code is not None and remnawave_available and not has_remnawave_link(code.links),
+        "can_add_remnawave_link": can_add_remnawave_link,
     }
 
 
@@ -336,12 +351,28 @@ async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manag
     code_id = manager.dialog_data.get("selected_code")
 
     code = await storage.codes.get(code_id)
-    # `when="can_add_remnawave_link"` already hides the button once one
-    # exists - guard here too since aiogram_dialog doesn't re-validate a
-    # stale render against current state before delivering the click.
-    if code is None or has_remnawave_link(code.links):
+    # `when="can_add_remnawave_link"` already hides the button once no
+    # Squad is left to attach - guard here too since aiogram_dialog doesn't
+    # re-validate a stale render against current state before delivering
+    # the click.
+    if code is None or not available_squads(await storage.squads.all(), code.links):
         return
-    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": ""}
+    await manager.switch_to(AdminCodes.choose_link_squad)
+
+
+async def choose_link_squad_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    code_id = dialog_manager.dialog_data.get("selected_code")
+    code = await storage.codes.get(code_id) if code_id else None
+    squads = available_squads(await storage.squads.all(), code.links) if code is not None else []
+    return {
+        "has_available_squads": bool(squads),
+        "squads": [{"id": s.id, "name": esc(s.name)} for s in squads],
+    }
+
+
+async def on_link_squad_chosen(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
+    manager.dialog_data["pending_link"] = {"type": LINK_TYPE_REMNAWAVE, "url": "", "squad_id": item_id}
     await manager.switch_to(AdminCodes.enter_link_name)
 
 
@@ -368,8 +399,16 @@ async def on_link_name_done(name: str, manager: DialogManager) -> None:
         bot = manager.middleware_data["bot"]
         admin = manager.middleware_data["event_from_user"]
         code_id = manager.dialog_data.get("selected_code")
-        await storage.codes.add_link(code_id, Link(type=pending["type"], name=name, url=pending["url"]))
+        squad_id = pending.get("squad_id", "")
+        await storage.codes.add_link(code_id, Link(type=pending["type"], name=name, url=pending["url"], squad_id=squad_id))
         logger.info("%s added a %s link to code %r", actor(admin), pending["type"], code_id)
+        if pending["type"] == LINK_TYPE_REMNAWAVE:
+            # A new remnawave link starts granting its Squad immediately -
+            # resync every current holder now instead of waiting for each
+            # one's next unrelated code grant/revoke.
+            remnawave = manager.middleware_data.get("remnawave")
+            for holder in await storage.users.users_with_code(code_id):
+                await sync_remnawave_access(storage, remnawave, holder.user_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
         await manager.switch_to(AdminCodes.links)
         return
@@ -466,50 +505,6 @@ async def on_code_renamed_done(new_code: str, manager: DialogManager) -> None:
     await manager.switch_to(AdminCodes.detail)
 
 
-async def open_edit_squads(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    storage: Storage = manager.middleware_data["storage"]
-    code_id = manager.dialog_data.get("selected_code")
-    code = await storage.codes.get(code_id) if code_id else None
-
-    await manager.switch_to(AdminCodes.edit_squads)
-    multiselect = manager.find(_CODE_SQUADS_SELECT_ID)
-    if multiselect is not None and code is not None:
-        for squad in code.remnawave_squads:
-            await multiselect.set_checked(squad, True)
-
-
-async def edit_squads_getter(dialog_manager: DialogManager, **kwargs) -> dict:
-    remnawave = dialog_manager.middleware_data.get("remnawave")
-    squads = []
-    if remnawave is not None:
-        try:
-            squads = await remnawave.list_internal_squads()
-        except RemnawaveError:
-            logger.warning("Failed to list Remnawave squads", exc_info=True)
-    return {
-        "has_squads": bool(squads),
-        "squads": [{"id": s.uuid, "name": esc(s.name)} for s in squads],
-    }
-
-
-async def on_squads_saved(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
-    if not await ensure_admin(manager):
-        await leave_admin_area(manager)
-        return
-
-    storage: Storage = manager.middleware_data["storage"]
-    i18n = manager.middleware_data["i18n"]
-    admin = manager.middleware_data["event_from_user"]
-    code_id = manager.dialog_data.get("selected_code")
-
-    multiselect = manager.find(_CODE_SQUADS_SELECT_ID)
-    squads = multiselect.get_checked() if multiselect is not None else []
-    await storage.codes.set_remnawave_squads(code_id, squads)
-    logger.info("%s set Remnawave squads of code %r to %s", actor(admin), code_id, squads)
-    await callback.answer(popup_text(i18n, "admin-code-squads-updated"))
-    await manager.switch_to(AdminCodes.detail)
-
-
 async def on_delete_code(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
@@ -552,7 +547,7 @@ async def on_toggle_remnawave_disabled(callback: CallbackQuery, _button: Button,
     new_state = not code.remnawave_disabled
     await storage.codes.set_remnawave_disabled(code_id, new_state)
     # Every current holder's squad grant depends on this flag (see
-    # services.remnawave_sync.compute_remnawave_squads) - resync them all
+    # services.remnawave_sync.compute_remnawave_grants) - resync them all
     # now instead of waiting for each one's next unrelated code grant/revoke.
     for holder in await storage.users.users_with_code(code_id):
         await sync_remnawave_access(storage, remnawave, holder.user_id)
@@ -601,7 +596,6 @@ codes_dialog = Dialog(
                 True: Multi(
                     I18N("admin-code-detail-title"),
                     I18N("admin-code-links-count", count="{links_count}"),
-                    I18N("admin-code-squads-count", count="{squad_count}", when="has_squads"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-codes-empty"),
@@ -622,13 +616,6 @@ codes_dialog = Dialog(
             on_click=open_edit_description,
             when="found",
             style=icon("pencil2"),
-        ),
-        Button(
-            I18N("admin-btn-edit-squads"),
-            id="edit_squads",
-            on_click=open_edit_squads,
-            when="remnawave_available",
-            style=icon("shield"),
         ),
         Button(
             Case(
@@ -707,6 +694,28 @@ codes_dialog = Dialog(
     Window(
         Case(
             {
+                True: I18N("admin-create-code-choose-squad-prompt"),
+                False: I18N("admin-create-code-squads-empty"),
+            },
+            selector="has_available_squads",
+        ),
+        Column(
+            Select(
+                I18N("admin-create-code-squad-item", name="{item[name]}"),
+                id="code_link_squad_select",
+                item_id_getter=lambda item: item["id"],
+                items="squads",
+                on_click=on_link_squad_chosen,
+                style=icon("shield"),
+            ),
+        ),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_add_type_from_squad", state=AdminCodes.add_link_type, style=icon("arrow_backward")),
+        state=AdminCodes.choose_link_squad,
+        getter=choose_link_squad_getter,
+    ),
+    Window(
+        Case(
+            {
                 True: Multi(
                     I18N("admin-code-link-detail-title", code="{code}", n="{n}"),
                     Format("{row}"),
@@ -766,30 +775,6 @@ codes_dialog = Dialog(
         AdminCodes.edit_code,
         on_code_renamed_done,
         SwitchTo(I18N("admin-btn-back"), id="back_to_detail4", state=AdminCodes.detail, style=icon("arrow_backward")),
-    ),
-    Window(
-        Case(
-            {
-                True: I18N("admin-code-edit-squads-prompt"),
-                False: I18N("admin-create-code-squads-empty"),
-            },
-            selector="has_squads",
-        ),
-        Column(
-            Multiselect(
-                I18N("admin-create-code-squad-item", name="{item[name]}"),
-                I18N("admin-create-code-squad-item", name="{item[name]}"),
-                id=_CODE_SQUADS_SELECT_ID,
-                item_id_getter=lambda item: item["id"],
-                items="squads",
-                checked_style=icon("check"),
-                unchecked_style=icon("shield"),
-            ),
-        ),
-        Button(I18N("admin-btn-done"), id="squads_saved", on_click=on_squads_saved, style=icon("white_check_mark", ButtonStyle.SUCCESS)),
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail3", state=AdminCodes.detail, style=icon("arrow_backward")),
-        state=AdminCodes.edit_squads,
-        getter=edit_squads_getter,
     ),
     on_start=on_dialog_start,
     on_process_result=on_child_result,

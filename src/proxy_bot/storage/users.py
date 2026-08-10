@@ -6,7 +6,7 @@ from pathlib import Path
 
 from proxy_bot.utils.audit import actor_id
 
-from .models import User
+from .models import RemnawaveAccount, User
 from .toml_file import TomlFile
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _user_from_raw(user_id: int, raw: dict) -> User:
+    """Build a User from its raw `users.toml` dict, unpacking the nested
+    `remnawave_accounts` table into RemnawaveAccount instances (a plain
+    `User(user_id=user_id, **raw)` can't do this itself - the dataclass
+    field is `dict[str, RemnawaveAccount]`, not `dict[str, dict]`)."""
+    data = dict(raw)
+    raw_accounts = data.pop("remnawave_accounts", {})
+    accounts = {server: RemnawaveAccount(**account) for server, account in raw_accounts.items()}
+    return User(user_id=user_id, remnawave_accounts=accounts, **data)
 
 
 class UserRepo:
@@ -25,11 +36,11 @@ class UserRepo:
         raw = data.get("users", {}).get(str(user_id))
         if raw is None:
             return None
-        return User(user_id=user_id, **raw)
+        return _user_from_raw(user_id, raw)
 
     async def all(self) -> list[User]:
         data = await self._file.read()
-        return [User(user_id=int(key), **raw) for key, raw in data.get("users", {}).items()]
+        return [_user_from_raw(int(key), raw) for key, raw in data.get("users", {}).items()]
 
     async def users_with_code(self, code: str) -> list[User]:
         return [u for u in await self.all() if code in u.codes]
@@ -54,7 +65,7 @@ class UserRepo:
             else:
                 users[key]["username"] = username or ""
                 users[key]["full_name"] = full_name
-            return User(user_id=user_id, **users[key])
+            return _user_from_raw(user_id, users[key])
 
         user = await self._file.update(mutate)
         if is_new:
@@ -133,15 +144,16 @@ class UserRepo:
     async def set_remnawave_account(
         self,
         user_id: int,
+        server: str,
         uuid: str | None,
         subscription_url: str | None,
         username: str | None = None,
         *,
         manual: bool = False,
     ) -> bool:
-        """Link (or unlink, if `uuid` is None) this user's Remnawave account.
-        `manual` distinguishes an admin's explicit "Link Remnawave" pick
-        (dialogs/admin/link_remnawave.py) from an automatic
+        """Link (or unlink, if `uuid` is None) this user's Remnawave account
+        on `server`. `manual` distinguishes an admin's explicit "Link
+        Remnawave" pick (dialogs/admin/link_remnawave.py) from an automatic
         provision/match (services/remnawave_sync.py) - shown on the admin
         user-detail page so an admin can tell the two apart."""
 
@@ -150,10 +162,16 @@ class UserRepo:
             key = str(user_id)
             if key not in users:
                 return False
-            users[key]["remnawave_uuid"] = uuid or ""
-            users[key]["remnawave_subscription_url"] = subscription_url or ""
-            users[key]["remnawave_username"] = username or ""
-            users[key]["remnawave_linked_manually"] = manual
+            accounts = users[key].setdefault("remnawave_accounts", {})
+            if uuid is None:
+                accounts.pop(server, None)
+            else:
+                accounts[server] = {
+                    "uuid": uuid,
+                    "subscription_url": subscription_url or "",
+                    "username": username or "",
+                    "linked_manually": manual,
+                }
             return True
 
         return await self._file.update(mutate)

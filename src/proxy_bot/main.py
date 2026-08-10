@@ -20,7 +20,7 @@ from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unk
 from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
 from proxy_bot.middlewares import InteractionLoggingMiddleware
-from proxy_bot.remnawave import RemnawaveClient
+from proxy_bot.remnawave import RemnawaveClient, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
@@ -51,11 +51,10 @@ async def run() -> None:
     setup_logging(config.logs_dir, level=config.log_level)
 
     storage = Storage(config.data_dir, root_admin_id=config.root_admin_id)
-    remnawave = (
-        RemnawaveClient(config.remnawave_api_url, config.remnawave_api_token)
-        if config.remnawave_api_url and config.remnawave_api_token
-        else None
-    )
+    remnawave_clients = {
+        name: RemnawaveClient(server.url, server.token) for name, server in config.remnawave_servers.items()
+    }
+    remnawave = RemnawaveRegistry(remnawave_clients) if remnawave_clients else None
 
     # HTML parse mode is on for every send (plain fluent strings render fine
     # as HTML). Any dynamic value interpolated into a message - names, codes,
@@ -104,7 +103,7 @@ async def run() -> None:
     finally:
         await bot.session.close()
         if remnawave is not None:
-            await remnawave.close()
+            await remnawave.close_all()
 
 
 def main() -> None:

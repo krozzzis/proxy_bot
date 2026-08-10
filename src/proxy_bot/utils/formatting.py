@@ -26,22 +26,33 @@ from .html import esc
 _BULLET = expand_tags(load_emoji_config(get_locales_dir() / "emoji.toml").get("link", "🔗"))
 
 
-def format_links(entries: Sequence[tuple[str, str]]) -> str:
+def format_links(entries: Sequence[tuple[str, str, str]]) -> str:
     """Render a monospaced (tap-to-copy) list of links for HTML parse mode,
-    one `(name, url)` pair per entry - fixed and Remnawave links alike, in
-    whatever order the caller already resolved them in (see
+    one `(name, url, suffix)` triple per entry - fixed and Remnawave links
+    alike, in whatever order the caller already resolved them in (see
     dialogs/user/links.py._resolve_link_entries).
 
-    A named entry renders as "((bullet)) ((name)):\\n ((url))"; an unnamed
-    one (every link that predates naming, or one an admin left blank)
-    degrades to the original single-line "((bullet)) ((url))" - every link
-    gets the same bullet regardless of how many there are, so a lone link
-    doesn't look inconsistent with a multi-link code shown right next to it.
+    `suffix` is an already-rendered trailing bit of text for the header
+    line - used for a remnawave link's own expiry when a code's links
+    resolve to more than one distinct Remnawave account (see
+    dialogs/user/links.py._build_detail); empty for every other link.
+    Passed through as-is, NOT esc()'d - it may itself carry real HTML (a
+    `<tg-time>` tag from utils.subscription_display), unlike `name` which is
+    admin-authored plain text.
+
+    A link with a name and/or suffix renders as
+    "((bullet)) ((name)) — ((suffix)):\\n ((url))" (either half optional);
+    one with neither (every link that predates naming, or one an admin left
+    blank) degrades to the original single-line "((bullet)) ((url))" -
+    every link gets the same bullet regardless of how many there are, so a
+    lone link doesn't look inconsistent with a multi-link code shown right
+    next to it.
     """
     lines = []
-    for name, url in entries:
-        if name:
-            lines.append(f"{_BULLET} {esc(name)}:\n <code>{esc(url)}</code>")
+    for name, url, suffix in entries:
+        header = " — ".join(part for part in (esc(name) if name else "", suffix) if part)
+        if header:
+            lines.append(f"{_BULLET} {header}:\n <code>{esc(url)}</code>")
         else:
             lines.append(f"{_BULLET} <code>{esc(url)}</code>")
     return "\n".join(lines)

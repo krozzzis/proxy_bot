@@ -8,6 +8,7 @@ from .admin import (
     codes_dialog,
     create_code_dialog,
     link_remnawave_dialog,
+    squads_dialog,
     users_dialog,
 )
 from .user import enter_code_dialog, help_dialog, links_dialog, settings_dialog, user_menu_dialog
@@ -27,4 +28,5 @@ router.include_routers(
     broadcast_dialog,
     add_user_dialog,
     link_remnawave_dialog,
+    squads_dialog,
 )

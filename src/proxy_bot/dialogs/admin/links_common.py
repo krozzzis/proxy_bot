@@ -1,28 +1,30 @@
 from __future__ import annotations
 
-from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE, Link
+from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE, Link, Squad
 from proxy_bot.utils.html import esc
 
 
-def has_remnawave_link(links: list[Link]) -> bool:
-    """A code's Remnawave subscription URL is a single per-user value (see
-    storage.models.Link), so only one `remnawave`-type entry in a code's
-    `links` ever makes sense - callers use this to hide "add a Remnawave
-    link" once one exists, same as how only one Remnawave squads selection
-    exists per code."""
-    return any(link.type == LINK_TYPE_REMNAWAVE for link in links)
+def available_squads(all_squads: list[Squad], links: list[Link]) -> list[Squad]:
+    """Bot Squads not yet attached to a `remnawave`-type link in `links` -
+    a Squad can only be attached to one link per code ("each with its own
+    Squad"), so this is what "add a remnawave link" offers to pick from.
+    Empty means either no Squads exist yet (create one in the Squads admin
+    screen first) or every existing Squad is already attached here."""
+    used = {link.squad_id for link in links if link.type == LINK_TYPE_REMNAWAVE and link.squad_id}
+    return [squad for squad in all_squads if squad.id not in used]
 
 
-def link_row(link: Link, i18n) -> str:
+def link_row(link: Link, i18n, squad_name: str | None = None) -> str:
     """One admin-facing line for a link entry - equal treatment for both
-    types (position, type label, value), but a `remnawave` entry never
-    shows a URL: it doesn't have one to show (its subscription URL is
-    resolved live per holder, see storage.models.Link) - just a fixed
-    placeholder, with the type label telling the admin what it actually is.
+    types (position, type label, value). A `remnawave` entry shows its
+    attached Squad's name (resolved by the caller, since that's a storage
+    lookup) rather than a URL - it doesn't have one to show, its
+    subscription URL is resolved live per holder (see storage.models.Link) -
+    or a "squad missing" placeholder if `squad_id` is empty or dangling.
     """
     if link.type == LINK_TYPE_REMNAWAVE:
         type_label = i18n.get("admin-code-link-type-remnawave")
-        value = i18n.get("admin-code-link-remnawave-value")
+        value = esc(squad_name) if squad_name else i18n.get("admin-code-link-squad-missing")
     else:
         type_label = i18n.get("admin-code-link-type-fix")
         value = f"<code>{esc(link.url)}</code>"
@@ -37,7 +39,7 @@ def link_row(link: Link, i18n) -> str:
 _LINK_BUTTON_URL_MAX = 40
 
 
-def link_button_label(link: Link, i18n) -> str:
+def link_button_label(link: Link, i18n, squad_name: str | None = None) -> str:
     """Plain-text (no HTML) label for the inline button that opens a link's
     edit submenu - same fields as link_row, but Telegram button text can't
     render markup, so no <code> tags and no esc()."""
@@ -47,7 +49,7 @@ def link_button_label(link: Link, i18n) -> str:
     if link.name:
         return f"{link.name} ({type_label})"
     if link.type == LINK_TYPE_REMNAWAVE:
-        return type_label
+        return f"{type_label}: {squad_name}" if squad_name else type_label
     url = link.url
     if len(url) > _LINK_BUTTON_URL_MAX:
         url = url[: _LINK_BUTTON_URL_MAX - 1] + "…"

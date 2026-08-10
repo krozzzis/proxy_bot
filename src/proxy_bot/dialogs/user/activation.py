@@ -5,9 +5,10 @@ from typing import Literal
 
 from aiogram.types import User
 
-from proxy_bot.remnawave import RemnawaveClient
+from proxy_bot.remnawave import RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Code, Storage
+from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
 from proxy_bot.utils.audit import actor
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ ActivationStatus = Literal["banned", "invalid", "already", "added"]
 
 
 async def activate_code(
-    storage: Storage, remnawave: RemnawaveClient | None, user: User, code_text: str
+    storage: Storage, remnawave: RemnawaveRegistry | None, user: User, code_text: str
 ) -> tuple[ActivationStatus, Code | None]:
     """Try to activate `code_text` for `user`. Shared by manual entry
     (enter_code.on_code_entered) and /start deep-link auto-activation
@@ -39,6 +40,6 @@ async def activate_code(
         return "already", code_record
 
     logger.info("%s activated code %r", actor(user), code)
-    if code_record.remnawave_squads:
+    if any(link.type == LINK_TYPE_REMNAWAVE for link in code_record.links):
         await sync_remnawave_access(storage, remnawave, user.id)
     return "added", code_record

@@ -12,6 +12,12 @@ _LOGO_MODES = ("before", "caption")
 
 
 @dataclass(frozen=True, slots=True)
+class RemnawaveServerConfig:
+    url: str
+    token: str
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     bot_token: str
     root_admin_id: int
@@ -23,8 +29,11 @@ class Config:
     fsm_backend: str
     fsm_sqlite_path: Path
     redis_url: str | None
-    remnawave_api_url: str | None
-    remnawave_api_token: str | None
+    # Zero or more independently-configured Remnawave panels, keyed by
+    # lowercased server name from the REMNAWAVE_API_URL_<NAME>/
+    # REMNAWAVE_API_TOKEN_<NAME> env pair (see _remnawave_servers_env) -
+    # empty dict means the integration is off entirely for this deployment.
+    remnawave_servers: dict[str, RemnawaveServerConfig]
     # Off by default: traffic usage is a coarser, more sensitive number than
     # "does this account still have access" - operators who don't want it
     # shown (to users or admins) can leave this unset rather than the bot
@@ -86,8 +95,7 @@ def load_config() -> Config:
         fsm_backend=os.environ.get("FSM_BACKEND", "sqlite").lower(),
         fsm_sqlite_path=Path(os.environ.get("FSM_SQLITE_PATH", BASE_DIR / "data" / "fsm.sqlite3")),
         redis_url=os.environ.get("REDIS_URL"),
-        remnawave_api_url=os.environ.get("REMNAWAVE_API_URL"),
-        remnawave_api_token=os.environ.get("REMNAWAVE_API_TOKEN"),
+        remnawave_servers=_remnawave_servers_env(),
         show_traffic_usage=_bool_env("SHOW_TRAFFIC_USAGE"),
         logo_path=(Path(os.environ["BRANDED_LOGO_PATH"]) if os.environ.get("BRANDED_LOGO_PATH") else None),
         logo_mode=_logo_mode_env(),
@@ -103,6 +111,40 @@ def _logo_mode_env() -> str:
         # the logo isn't showing where the operator configured it to.
         raise RuntimeError(f"BRANDED_LOGO_MODE must be one of {_LOGO_MODES}, got {value!r}")
     return value
+
+
+_REMNAWAVE_URL_PREFIX = "REMNAWAVE_API_URL_"
+_REMNAWAVE_TOKEN_PREFIX = "REMNAWAVE_API_TOKEN_"
+
+
+def _remnawave_servers_env() -> dict[str, RemnawaveServerConfig]:
+    """Every REMNAWAVE_API_URL_<NAME> paired with its REMNAWAVE_API_TOKEN_<NAME>,
+    keyed by lowercased <NAME>. Each URL requires a matching token (and vice
+    versa) - a lone half of the pair is almost certainly a typo'd name on one
+    of the two variables, not an intentionally partial server, so it's
+    raised on rather than silently dropped (same philosophy as
+    _logo_mode_env() refusing a typo'd mode)."""
+    urls = {
+        key[len(_REMNAWAVE_URL_PREFIX) :].lower(): value
+        for key, value in os.environ.items()
+        if key.startswith(_REMNAWAVE_URL_PREFIX) and value
+    }
+    tokens = {
+        key[len(_REMNAWAVE_TOKEN_PREFIX) :].lower(): value
+        for key, value in os.environ.items()
+        if key.startswith(_REMNAWAVE_TOKEN_PREFIX) and value
+    }
+    missing_tokens = urls.keys() - tokens.keys()
+    if missing_tokens:
+        raise RuntimeError(
+            f"REMNAWAVE_API_URL_<NAME> set without a matching REMNAWAVE_API_TOKEN_<NAME> for: {sorted(missing_tokens)}"
+        )
+    missing_urls = tokens.keys() - urls.keys()
+    if missing_urls:
+        raise RuntimeError(
+            f"REMNAWAVE_API_TOKEN_<NAME> set without a matching REMNAWAVE_API_URL_<NAME> for: {sorted(missing_urls)}"
+        )
+    return {name: RemnawaveServerConfig(url=url, token=tokens[name]) for name, url in urls.items()}
 
 
 _LOGO_OVERRIDE_PREFIX = "BRANDED_LOGO_PATH_"

@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
-from aiogram_dialog.widgets.text import Case, Format, Multi
+from aiogram_dialog.widgets.text import Case, Format, List, Multi
 
 from proxy_bot.remnawave import RemnawaveError
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
@@ -103,15 +103,15 @@ async def open_add_user(_callback: CallbackQuery, _button: Button, manager: Dial
     await manager.start(AdminAddUser.enter_identifier)
 
 
-async def open_link_remnawave(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+async def open_link_remnawave(_callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
     user_id = manager.dialog_data.get("selected_user_id")
-    await manager.start(LinkRemnawave.enter_username, data={"user_id": user_id})
+    await manager.start(LinkRemnawave.enter_username, data={"user_id": user_id, "server": item_id})
 
 
-async def on_unlink_remnawave(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+async def on_unlink_remnawave(callback: CallbackQuery, _select, manager: DialogManager, item_id: str) -> None:
     if not await ensure_admin(manager):
         await leave_admin_area(manager)
         return
@@ -120,21 +120,22 @@ async def on_unlink_remnawave(callback: CallbackQuery, _button: Button, manager:
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
     user_id = manager.dialog_data.get("selected_user_id")
+    server = item_id
 
     user = await storage.users.get(user_id)
     if user is None:
         return
 
     # Clears the manual link, not the account itself - if the user still
-    # holds a squad-granting code, sync_remnawave_access below immediately
-    # re-matches the same account (by telegram id) and re-marks it auto,
-    # rather than leaving them with no account at all.
-    await storage.users.set_remnawave_account(user_id, None, None, None, manual=False)
+    # holds a squad-granting code on this server, sync_remnawave_access
+    # below immediately re-matches the same account (by telegram id) and
+    # re-marks it auto, rather than leaving them with no account at all.
+    await storage.users.set_remnawave_account(user_id, server, None, None, None, manual=False)
     remnawave = manager.middleware_data.get("remnawave")
     await sync_remnawave_access(storage, remnawave, user_id)
 
     target = actor_id(user_id, user.username)
-    logger.info("%s unlinked Remnawave account from %s", actor(admin), target)
+    logger.info("%s unlinked Remnawave account on server %r from %s", actor(admin), server, target)
     await callback.answer(popup_text(i18n, "admin-user-remnawave-unlinked-done", id=str(user_id)), show_alert=True)
 
 
@@ -172,6 +173,50 @@ async def on_next_page(_callback: CallbackQuery, _button: Button, manager: Dialo
     manager.dialog_data["page"] = manager.dialog_data.get("page", 0) + 1
 
 
+async def _account_rows_and_server_choices(
+    dialog_manager: DialogManager, i18n, user, remnawave
+) -> tuple[list[str], list[dict], list[dict]]:
+    """Per-server Remnawave state for the user-detail screen: one rendered
+    line per account with its own expiry/traffic (account_rows - empty
+    while user.remnawave_disabled, mirroring the old single-account
+    behavior of showing no Remnawave info at all when disabled), and the
+    server lists driving the Link/Unlink Select rows. A server offers
+    "Link" unless its account is already manually linked (so an admin can
+    always force-link a different account over an auto-matched one), and
+    "Unlink" only when it is - same per-server as the old single-account
+    show_link_remnawave/show_unlink_remnawave split."""
+    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
+    account_rows: list[str] = []
+    link_servers: list[dict] = []
+    unlink_servers: list[dict] = []
+    for server in remnawave.names():
+        account = user.remnawave_accounts.get(server)
+        manually_linked = account is not None and account.linked_manually
+        (unlink_servers if manually_linked else link_servers).append({"id": server, "name": esc(server)})
+        if account is None or user.remnawave_disabled:
+            continue
+        subscription_info = await fetch_subscription_lines(
+            remnawave.get(server), account.uuid, i18n, show_traffic=show_traffic
+        )
+        source = i18n.get(
+            "admin-user-remnawave-link-source-manual" if account.linked_manually else "admin-user-remnawave-link-source-auto"
+        )
+        row = i18n.get(
+            "admin-user-remnawave-linked",
+            server=esc(server),
+            username=esc(account.username) if account.username else "—",
+            source=source,
+        )
+        # subscription_info's expiry/traffic are their own already-rendered
+        # lines (see fetch_subscription_lines) - appended only when present,
+        # same as the plain-string equivalent of _DETAIL_CONTENT's separate
+        # Format("{expiry}")/Format("{traffic}") widgets skipping an empty
+        # render, so a disabled-traffic deployment doesn't get a blank line.
+        row = "\n".join(part for part in (row, *(subscription_info or {}).values()) if part)
+        account_rows.append(row)
+    return account_rows, link_servers, unlink_servers
+
+
 async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     user_id = dialog_manager.dialog_data.get("selected_user_id")
@@ -182,14 +227,16 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
 
     name = display_name(user.username, user.full_name, user.user_id)
     remnawave = dialog_manager.middleware_data.get("remnawave")
-    show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
-    # A disabled user shows no Remnawave info at all, expiry/traffic
-    # included, even though the underlying account (if any) is untouched -
-    # see services.remnawave_sync.compute_remnawave_squads.
-    subscription_info = (
-        None if user.remnawave_disabled else await fetch_subscription_lines(remnawave, user.remnawave_uuid, i18n, show_traffic=show_traffic)
-    )
     remnawave_available = remnawave is not None
+
+    account_rows: list[str] = []
+    link_servers: list[dict] = []
+    unlink_servers: list[dict] = []
+    if remnawave_available:
+        account_rows, link_servers, unlink_servers = await _account_rows_and_server_choices(
+            dialog_manager, i18n, user, remnawave
+        )
+
     return {
         "found": True,
         "name": esc(name),
@@ -204,21 +251,14 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
         "banned": user.banned,
         "not_banned": not user.banned,
         "remnawave_available": remnawave_available,
-        "remnawave_linked": bool(user.remnawave_uuid) and not user.remnawave_disabled,
-        # `when=` only ever looks up one key (see aiogram_dialog.widgets.common.when) -
-        # these two are precomputed so the Link/Unlink buttons don't need a
-        # combined expression.
-        "show_link_remnawave": remnawave_available and not user.remnawave_linked_manually,
-        "show_unlink_remnawave": remnawave_available and user.remnawave_linked_manually,
+        "has_account_rows": bool(account_rows),
+        "account_rows": account_rows,
+        "link_servers": link_servers,
+        "has_link_servers": bool(link_servers),
+        "unlink_servers": unlink_servers,
+        "has_unlink_servers": bool(unlink_servers),
         "remnawave_disabled": user.remnawave_disabled,
         "remnawave_not_disabled": not user.remnawave_disabled,
-        "remnawave_username": esc(user.remnawave_username) if user.remnawave_username else "—",
-        # Fed into `admin-user-remnawave-linked`'s `$source` var below, same
-        # reason as banned_label above - a nested arg value, not window text.
-        "remnawave_link_source": i18n.get(
-            "admin-user-remnawave-link-source-manual" if user.remnawave_linked_manually else "admin-user-remnawave-link-source-auto"
-        ),
-        **(subscription_info or {"expiry": "", "traffic": ""}),
     }
 
 
@@ -308,19 +348,24 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
     action = "banned" if new_state else "unbanned"
     logger.info("%s %s %s", actor(admin), action, target)
 
-    # Push the ban/unban straight through to the linked Remnawave account -
-    # the reverse direction (a panel-side status change flowing back into
-    # `banned`) is handled by the periodic sweep in services.remnawave_sync,
-    # since nothing here would learn about an out-of-band panel edit.
+    # Push the ban/unban straight through to every linked Remnawave account
+    # (one per server) - the reverse direction (a panel-side status change
+    # flowing back into `banned`) is handled by the periodic sweep in
+    # services.remnawave_sync, since nothing here would learn about an
+    # out-of-band panel edit.
     remnawave = manager.middleware_data.get("remnawave")
-    if remnawave is not None and user.remnawave_uuid:
-        try:
-            if new_state:
-                await remnawave.disable_user(user.remnawave_uuid)
-            else:
-                await remnawave.enable_user(user.remnawave_uuid)
-        except RemnawaveError:
-            logger.warning("Failed to push ban state to Remnawave for %s", target, exc_info=True)
+    if remnawave is not None:
+        for server, account in user.remnawave_accounts.items():
+            client = remnawave.get(server)
+            if client is None or not account.uuid:
+                continue
+            try:
+                if new_state:
+                    await client.disable_user(account.uuid)
+                else:
+                    await client.enable_user(account.uuid)
+            except RemnawaveError:
+                logger.warning("Failed to push ban state to Remnawave (server %r) for %s", server, target, exc_info=True)
 
     await callback.answer()
 
@@ -359,14 +404,7 @@ users_dialog = Dialog(
                 True: Multi(
                     I18N("admin-user-detail-title", banned="{banned_label}"),
                     I18N("admin-user-codes-none", when="no_codes"),
-                    I18N(
-                        "admin-user-remnawave-linked",
-                        username="{remnawave_username}",
-                        source="{remnawave_link_source}",
-                        when="remnawave_linked",
-                    ),
-                    Format("{expiry}"),
-                    Format("{traffic}"),
+                    List(Format("{item}"), items="account_rows", sep="\n\n", when="has_account_rows"),
                     sep="\n\n",
                 ),
                 False: I18N("admin-users-empty"),
@@ -387,19 +425,27 @@ users_dialog = Dialog(
             when="found",
             style=_BAN_TOGGLE_STYLE,
         ),
-        Button(
-            I18N("admin-btn-link-remnawave"),
-            id="link_remnawave",
-            on_click=open_link_remnawave,
-            when="show_link_remnawave",
-            style=icon("shield"),
+        Column(
+            Select(
+                I18N("admin-btn-link-remnawave-server", server="{item[name]}"),
+                id="link_remnawave_select",
+                item_id_getter=lambda item: item["id"],
+                items="link_servers",
+                on_click=open_link_remnawave,
+                style=icon("shield"),
+            ),
+            when="has_link_servers",
         ),
-        Button(
-            I18N("admin-btn-unlink-remnawave"),
-            id="unlink_remnawave",
-            on_click=on_unlink_remnawave,
-            when="show_unlink_remnawave",
-            style=icon("shield", ButtonStyle.DANGER),
+        Column(
+            Select(
+                I18N("admin-btn-unlink-remnawave-server", server="{item[name]}"),
+                id="unlink_remnawave_select",
+                item_id_getter=lambda item: item["id"],
+                items="unlink_servers",
+                on_click=on_unlink_remnawave,
+                style=icon("shield", ButtonStyle.DANGER),
+            ),
+            when="has_unlink_servers",
         ),
         Button(
             Case(
