@@ -118,6 +118,9 @@ admin-code-detail-title =
     { $emoji_package } <b>{ $code }</b>
 
     Подписка: { $description }
+admin-code-links-count = Ссылок: { $count }
+admin-btn-manage-links = Ссылки
+admin-code-links-title = { $emoji_link } <b>Ссылки — { $code }</b>
 admin-code-no-links = Ссылок пока нет.
 admin-code-remove-link-btn = Удалить ссылку #{ $n }
 admin-code-link-removed = Ссылка удалена.

@@ -43,6 +43,7 @@ async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
 class AdminCodes(StatesGroup):
     list = State()
     detail = State()
+    links = State()
     enter_link = State()
     enter_link_name = State()
     edit_description = State()
@@ -111,7 +112,33 @@ async def on_next_page(_callback: CallbackQuery, _button: Button, manager: Dialo
     manager.dialog_data["page"] = manager.dialog_data.get("page", 0) + 1
 
 
-async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
+async def codes_detail_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    code_id = dialog_manager.dialog_data.get("selected_code")
+    code = await storage.codes.get(code_id) if code_id else None
+
+    if code is None:
+        return {"found": False}
+
+    remnawave_available = dialog_manager.middleware_data.get("remnawave") is not None
+    return {
+        "found": True,
+        "code": esc(code.code),
+        "description": esc(code.description or "—"),
+        "links_count": len(code.links),
+        "remnawave_available": remnawave_available,
+        "has_squads": bool(code.remnawave_squads),
+        "squad_count": len(code.remnawave_squads),
+        "remnawave_disabled": code.remnawave_disabled,
+        "remnawave_not_disabled": not code.remnawave_disabled,
+    }
+
+
+async def open_links_menu(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(AdminCodes.links)
+
+
+async def code_links_getter(dialog_manager: DialogManager, i18n, **kwargs) -> dict:
     storage: Storage = dialog_manager.middleware_data["storage"]
     code_id = dialog_manager.dialog_data.get("selected_code")
     code = await storage.codes.get(code_id) if code_id else None
@@ -130,18 +157,12 @@ async def codes_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
     return {
         "found": True,
         "code": esc(code.code),
-        "description": esc(code.description or "—"),
         "has_links": bool(code.links),
         "links": [link_row(link, i18n) for link in code.links],
         "link_items": link_items,
         "up_items": link_items[1:],
         "down_items": link_items[:-1],
-        "remnawave_available": remnawave_available,
         "can_add_remnawave_link": remnawave_available and not has_remnawave_link(code.links),
-        "has_squads": bool(code.remnawave_squads),
-        "squad_count": len(code.remnawave_squads),
-        "remnawave_disabled": code.remnawave_disabled,
-        "remnawave_not_disabled": not code.remnawave_disabled,
     }
 
 
@@ -230,7 +251,7 @@ async def on_link_done(link: str, manager: DialogManager) -> None:
         return
 
     if not link:
-        await manager.switch_to(AdminCodes.detail)
+        await manager.switch_to(AdminCodes.links)
         return
     manager.dialog_data["pending_link"] = {"type": LINK_TYPE_FIX, "url": link}
     await manager.switch_to(AdminCodes.enter_link_name)
@@ -256,7 +277,7 @@ async def on_add_remnawave_link(_callback: CallbackQuery, _button: Button, manag
 
 async def on_link_name_cancel(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
     manager.dialog_data.pop("pending_link", None)
-    await manager.switch_to(AdminCodes.detail)
+    await manager.switch_to(AdminCodes.links)
 
 
 async def on_link_name_done(name: str, manager: DialogManager) -> None:
@@ -274,7 +295,7 @@ async def on_link_name_done(name: str, manager: DialogManager) -> None:
         await storage.codes.add_link(code_id, Link(type=pending["type"], name=name, url=pending["url"]))
         logger.info("%s added a %s link to code %r", actor(admin), pending["type"], code_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
-    await manager.switch_to(AdminCodes.detail)
+    await manager.switch_to(AdminCodes.links)
 
 
 async def open_edit_description(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -490,13 +511,7 @@ codes_dialog = Dialog(
             {
                 True: Multi(
                     I18N("admin-code-detail-title"),
-                    Case(
-                        {
-                            True: List(Format("{pos}. {item}"), items="links", sep="\n"),
-                            False: I18N("admin-code-no-links"),
-                        },
-                        selector="has_links",
-                    ),
+                    I18N("admin-code-links-count", count="{links_count}"),
                     I18N("admin-code-squads-count", count="{squad_count}", when="has_squads"),
                     sep="\n\n",
                 ),
@@ -504,42 +519,7 @@ codes_dialog = Dialog(
             },
             selector="found",
         ),
-        Column(
-            Select(
-                I18N("admin-code-move-link-up-btn", n="{item[n]}"),
-                id="move_link_up_select",
-                item_id_getter=lambda item: item["id"],
-                items="up_items",
-                on_click=on_move_link_up,
-            ),
-        ),
-        Column(
-            Select(
-                I18N("admin-code-move-link-down-btn", n="{item[n]}"),
-                id="move_link_down_select",
-                item_id_getter=lambda item: item["id"],
-                items="down_items",
-                on_click=on_move_link_down,
-            ),
-        ),
-        Column(
-            Select(
-                I18N("admin-code-remove-link-btn", n="{item[n]}"),
-                id="remove_link_select",
-                item_id_getter=lambda item: item["id"],
-                items="link_items",
-                on_click=on_remove_link,
-                style=icon("x", ButtonStyle.DANGER),
-            ),
-        ),
-        Button(I18N("admin-btn-add-link"), id="add_link", on_click=open_add_link, when="found", style=icon("heavy_plus_sign")),
-        Button(
-            I18N("admin-btn-add-remnawave-link"),
-            id="add_remnawave_link",
-            on_click=on_add_remnawave_link,
-            when="can_add_remnawave_link",
-            style=icon("shield"),
-        ),
+        Button(I18N("admin-btn-manage-links"), id="open_links", on_click=open_links_menu, when="found", style=icon("link")),
         Button(
             I18N("admin-btn-edit-code"),
             id="edit_code",
@@ -582,11 +562,69 @@ codes_dialog = Dialog(
         state=AdminCodes.detail,
         getter=codes_detail_getter,
     ),
+    Window(
+        Case(
+            {
+                True: Multi(
+                    I18N("admin-code-links-title", code="{code}"),
+                    Case(
+                        {
+                            True: List(Format("{pos}. {item}"), items="links", sep="\n"),
+                            False: I18N("admin-code-no-links"),
+                        },
+                        selector="has_links",
+                    ),
+                    sep="\n\n",
+                ),
+                False: I18N("admin-codes-empty"),
+            },
+            selector="found",
+        ),
+        Column(
+            Select(
+                I18N("admin-code-move-link-up-btn", n="{item[n]}"),
+                id="move_link_up_select",
+                item_id_getter=lambda item: item["id"],
+                items="up_items",
+                on_click=on_move_link_up,
+            ),
+        ),
+        Column(
+            Select(
+                I18N("admin-code-move-link-down-btn", n="{item[n]}"),
+                id="move_link_down_select",
+                item_id_getter=lambda item: item["id"],
+                items="down_items",
+                on_click=on_move_link_down,
+            ),
+        ),
+        Column(
+            Select(
+                I18N("admin-code-remove-link-btn", n="{item[n]}"),
+                id="remove_link_select",
+                item_id_getter=lambda item: item["id"],
+                items="link_items",
+                on_click=on_remove_link,
+                style=icon("x", ButtonStyle.DANGER),
+            ),
+        ),
+        Button(I18N("admin-btn-add-link"), id="add_link", on_click=open_add_link, when="found", style=icon("heavy_plus_sign")),
+        Button(
+            I18N("admin-btn-add-remnawave-link"),
+            id="add_remnawave_link",
+            on_click=on_add_remnawave_link,
+            when="can_add_remnawave_link",
+            style=icon("shield"),
+        ),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_detail_from_links", state=AdminCodes.detail, style=icon("arrow_backward")),
+        state=AdminCodes.links,
+        getter=code_links_getter,
+    ),
     build_field_window(
         LINK_FIELD,
         AdminCodes.enter_link,
         on_link_done,
-        SwitchTo(I18N("admin-btn-back"), id="back_to_detail", state=AdminCodes.detail, style=icon("arrow_backward")),
+        SwitchTo(I18N("admin-btn-back"), id="back_to_links", state=AdminCodes.links, style=icon("arrow_backward")),
     ),
     build_field_window(
         LINK_NAME_FIELD,

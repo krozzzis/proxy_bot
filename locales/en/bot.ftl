@@ -118,6 +118,9 @@ admin-code-detail-title =
     { $emoji_package } <b>{ $code }</b>
 
     Subscription: { $description }
+admin-code-links-count = Links: { $count }
+admin-btn-manage-links = Links
+admin-code-links-title = { $emoji_link } <b>Links — { $code }</b>
 admin-code-no-links = No links yet.
 admin-code-remove-link-btn = Remove link #{ $n }
 admin-code-link-removed = Link removed.
