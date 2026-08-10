@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Annotated
 
@@ -11,8 +12,10 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Multi
 from pydantic import StringConstraints, TypeAdapter
 
-from proxy_bot.remnawave import RemnawaveError
+from proxy_bot.remnawave import RemnawaveError, RemnawaveRegistry
+from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
+from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
 from proxy_bot.utils.audit import actor
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.i18n import popup_text
@@ -154,6 +157,36 @@ def _checked_internal_squad_uuids(manager: DialogManager, checked_ids: list[str]
     return [uuid_map[i] for i in checked_ids if i in uuid_map]
 
 
+async def _affected_user_ids(storage: Storage, squad_id: str) -> set[int]:
+    """Every user who holds a code with a `remnawave`-type link attached to
+    this Squad - changing (or removing) the Squad changes what
+    services.remnawave_sync.compute_remnawave_grants computes for them."""
+    codes = await storage.codes.all()
+    affected_codes = [
+        code.code
+        for code in codes
+        if any(link.type == LINK_TYPE_REMNAWAVE and link.squad_id == squad_id for link in code.links)
+    ]
+    user_ids: set[int] = set()
+    for code in affected_codes:
+        for user in await storage.users.users_with_code(code):
+            user_ids.add(user.user_id)
+    return user_ids
+
+
+async def _resync_affected_users(storage: Storage, remnawave: RemnawaveRegistry | None, user_ids: set[int]) -> None:
+    """Fire-and-forget background sweep: a Squad edit/delete can affect an
+    arbitrary number of holders, and each sync_remnawave_access() call is
+    its own round trip to the panel - run these after the triggering
+    handler has already returned and the admin has their confirmation,
+    rather than making them wait on however many users are affected."""
+    for user_id in user_ids:
+        try:
+            await sync_remnawave_access(storage, remnawave, user_id)
+        except Exception:
+            logger.exception("Failed to resync Remnawave access for user %s after a Squad change", user_id)
+
+
 async def add_choose_internal_squads_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     server = dialog_manager.dialog_data.get("new_server", "")
     internal_squads = await _list_internal_squads(dialog_manager, server)
@@ -243,10 +276,14 @@ async def open_edit_internal_squads(_callback: CallbackQuery, _button: Button, m
     squad_id = manager.dialog_data.get("selected_squad")
     squad = await storage.squads.get(squad_id) if squad_id else None
 
-    # switch_to renders the window, which runs edit_internal_squads_getter
-    # and (via _list_internal_squads) populates dialog_data's short-id ->
-    # uuid mapping - read afterwards so the pre-check below uses the same
-    # ids the rendered Multiselect actually has.
+    if squad is not None:
+        # DialogManager.switch_to() only updates the FSM state - it does
+        # NOT render (aiogram_dialog's middleware renders after this whole
+        # handler returns), so edit_internal_squads_getter and its
+        # short-id -> uuid mapping wouldn't exist yet if we waited for
+        # switch_to below to produce it. Populate it ourselves first.
+        await _list_internal_squads(manager, squad.server)
+
     await manager.switch_to(AdminSquads.edit_internal_squads)
     multiselect = manager.find(_EDIT_INTERNAL_SQUADS_SELECT_ID)
     if multiselect is not None and squad is not None:
@@ -283,6 +320,13 @@ async def on_edit_internal_squads_done(callback: CallbackQuery, _button: Button,
     internal_squad_uuids = _checked_internal_squad_uuids(manager, checked_ids)
     await storage.squads.set_internal_squad_uuids(squad_id, internal_squad_uuids)
     logger.info("%s set internal squads of Squad %r to %s", actor(admin), squad_id, internal_squad_uuids)
+
+    remnawave = manager.middleware_data.get("remnawave")
+    user_ids = await _affected_user_ids(storage, squad_id)
+    if user_ids:
+        asyncio.create_task(_resync_affected_users(storage, remnawave, user_ids))
+        logger.info("%s triggered a background Remnawave resync for %d holder(s) of Squad %r", actor(admin), len(user_ids), squad_id)
+
     await callback.answer(popup_text(i18n, "admin-squad-internal-squads-updated"))
     await manager.switch_to(AdminSquads.detail)
 
@@ -297,8 +341,13 @@ async def on_delete_squad(callback: CallbackQuery, _button: Button, manager: Dia
     admin = manager.middleware_data["event_from_user"]
     squad_id = manager.dialog_data.get("selected_squad")
 
+    user_ids = await _affected_user_ids(storage, squad_id)
     if await storage.squads.delete(squad_id):
         logger.info("%s deleted Squad %r", actor(admin), squad_id)
+        if user_ids:
+            remnawave = manager.middleware_data.get("remnawave")
+            asyncio.create_task(_resync_affected_users(storage, remnawave, user_ids))
+            logger.info("%s triggered a background Remnawave resync for %d holder(s) of deleted Squad %r", actor(admin), len(user_ids), squad_id)
         await callback.answer(popup_text(i18n, "admin-squad-deleted-done"), show_alert=True)
     await manager.switch_to(AdminSquads.list)
 
