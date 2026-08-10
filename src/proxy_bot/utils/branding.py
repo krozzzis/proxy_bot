@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections import defaultdict
 from pathlib import Path
 
 from aiogram import Bot
@@ -52,12 +54,26 @@ _logo_file_id_cache: dict[Path, tuple[float, str]] = {}
 # so a locale switch already makes it swap on its own - branded_logo_getter
 # re-resolves the path on every render, and aiogram_dialog's own
 # MediaIdStorage edits the message's media in place when that path changes
-# (see dialogs/common.py). "before" mode's photo is a plain message sent
-# once by handlers/user.py, entirely outside the dialog framework, so
-# nothing re-renders it on its own - this lets a locale switch
-# (dialogs/user/settings.py) find that exact message again and swap its
-# photo via update_before_mode_logo() below.
+# (see dialogs/common.py). "before" mode's photo is a plain message, sent
+# and re-sent outside the dialog framework by every handler in
+# handlers/user.py that opens a menu (a fresh /start, /admin, /link, /code,
+# /help, or a forced dialog resend on stray text - see
+# resync_before_mode_logo) - nothing in the dialog framework re-renders it
+# on its own. This mapping serves two purposes: a locale switch
+# (dialogs/user/settings.py) uses it to find that exact message and swap
+# its photo via update_before_mode_logo() below, and send_before_mode_logo()
+# uses it to delete the previous logo message before sending a new one, so
+# only one is ever visible per chat.
 _before_mode_message_ids: dict[int, int] = {}
+
+# Serializes send_before_mode_logo() per chat - it reads the old message id,
+# deletes it, then sends+records a new one, and two calls racing on the same
+# chat (e.g. two stray messages arriving close together) would both read the
+# same old id, each send their own photo, and leave the earlier of the two
+# permanently orphaned (never deleted by anything after the map moves on to
+# the later one). A per-chat lock makes that read-delete-send-record
+# sequence atomic instead.
+_before_mode_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 def _photo_input(resolved: Path) -> str | FSInputFile:
@@ -80,18 +96,36 @@ async def send_before_mode_logo(
     locale: str,
 ) -> Message | None:
     """Send "before"-mode's standalone logo message and remember it for
-    this chat. Returns None (nothing sent) if logo_path is unset or no
+    this chat, deleting whatever logo message was there before - callers
+    (a fresh /start, a command that opens a menu directly, a forced
+    dialog resend) each send this on top of a menu that itself always
+    ends up as a new message too, so without deleting the previous logo
+    first, every one of those would pile up its own leftover photo above
+    an equally-stale menu it no longer precedes. Only one logo message
+    should ever be visible per chat: the one right before the current
+    menu. Returns None (nothing sent) if logo_path is unset or no
     locale-resolved file exists on disk."""
     resolved = resolve_logo_path(logo_path, logo_overrides, locale)
     if resolved is None or not resolved.is_file():
         return None
 
-    photo = _photo_input(resolved)
-    sent = await message.answer_photo(photo)
-    if isinstance(photo, FSInputFile):
-        _remember_file_id(resolved, sent)
-    _before_mode_message_ids[sent.chat.id] = sent.message_id
-    return sent
+    chat_id = message.chat.id
+    async with _before_mode_locks[chat_id]:
+        old_message_id = _before_mode_message_ids.get(chat_id)
+        if old_message_id is not None:
+            try:
+                await message.bot.delete_message(chat_id, old_message_id)
+            except TelegramBadRequest:
+                # Already gone (user deleted it themselves, or it's past
+                # Telegram's 48h delete window) - nothing to clean up.
+                pass
+
+        photo = _photo_input(resolved)
+        sent = await message.answer_photo(photo)
+        if isinstance(photo, FSInputFile):
+            _remember_file_id(resolved, sent)
+        _before_mode_message_ids[chat_id] = sent.message_id
+        return sent
 
 
 async def update_before_mode_logo(

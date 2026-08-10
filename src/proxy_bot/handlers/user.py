@@ -58,18 +58,17 @@ async def resync_before_mode_logo(
     # private chat it always resends the current window as a brand new
     # message instead (see aiogram_dialog.manager.manager.DialogManager.
     # _calc_show_mode: ShowMode.SEND whenever the triggering event is a
-    # Message). That's every text the user sends while the main menu is
-    # open, since UserMenu.main has no TextInput of its own to consume it.
+    # Message), regardless of which dialog/state is open or whether that
+    # window's own TextInput ends up consuming the text.
     #
     # The "before"-mode logo (see _send_logo above) is a separate, plain
     # message sent once at /start - it isn't part of that resend, so
-    # without this it's left behind above the chat while the menu keeps
-    # reappearing at the bottom, no longer looking like the same splash.
-    # Resending it here keeps the pair together; scoped to UserMenu.main
-    # specifically since that's the only screen this logo is meant to
-    # precede (see _send_logo's docstring) - other dialogs already resend
-    # for their own reasons without needing the logo to follow them there.
-    if dialog_manager.has_context() and dialog_manager.current_context().state == UserMenu.main:
+    # without this it's left behind above the chat while whatever menu is
+    # open keeps reappearing at the bottom, no longer looking like the
+    # same splash. Resending it here on every such resend (not just
+    # UserMenu.main) keeps the pair together wherever the admin/user
+    # happens to be.
+    if dialog_manager.has_context():
         await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
     # Never actually "handles" the message - just resyncs the logo as a
     # side effect, then lets the normal command/dialog/fallback routing
@@ -109,7 +108,15 @@ async def cmd_start(
 
 
 @router.message(Command("code"))
-async def cmd_code(message: Message, dialog_manager: DialogManager) -> None:
+async def cmd_code(
+    message: Message,
+    dialog_manager: DialogManager,
+    logo_path: Path | None,
+    logo_mode: str,
+    logo_path_overrides: dict[str, Path],
+    i18n,
+) -> None:
+    await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
     # enter_code is a sub-dialog of the main menu now, not one of its states -
     # start the menu underneath first so Cancel has somewhere to land. Its
     # own render is suppressed (NO_UPDATE) since only the sub-dialog on top
@@ -120,20 +127,44 @@ async def cmd_code(message: Message, dialog_manager: DialogManager) -> None:
 
 
 @router.message(Command("link"))
-async def cmd_link(message: Message, dialog_manager: DialogManager) -> None:
+async def cmd_link(
+    message: Message,
+    dialog_manager: DialogManager,
+    logo_path: Path | None,
+    logo_mode: str,
+    logo_path_overrides: dict[str, Path],
+    i18n,
+) -> None:
+    await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
     await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE)
     await dialog_manager.start(Links.main, show_mode=ShowMode.SEND)
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message, dialog_manager: DialogManager) -> None:
+async def cmd_help(
+    message: Message,
+    dialog_manager: DialogManager,
+    logo_path: Path | None,
+    logo_mode: str,
+    logo_path_overrides: dict[str, Path],
+    i18n,
+) -> None:
+    await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
     await dialog_manager.start(UserMenu.main, mode=StartMode.RESET_STACK, show_mode=ShowMode.NO_UPDATE)
     await dialog_manager.start(Help.main, show_mode=ShowMode.SEND)
 
 
 @router.message(Command("admin"), IsAdmin())
-async def cmd_admin(message: Message, dialog_manager: DialogManager) -> None:
+async def cmd_admin(
+    message: Message,
+    dialog_manager: DialogManager,
+    logo_path: Path | None,
+    logo_mode: str,
+    logo_path_overrides: dict[str, Path],
+    i18n,
+) -> None:
     logger.info("%s opened the admin panel", actor(message.from_user))
+    await _send_logo(message, logo_path, logo_mode, logo_path_overrides, i18n.locale)
     await dialog_manager.start(AdminMenu.main, mode=StartMode.RESET_STACK)
 
 
