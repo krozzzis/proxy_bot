@@ -113,7 +113,7 @@ admin-create-code-done = { $emoji_white_check_mark } Code "{ $code }" created.
 admin-page-indicator = · { $page }/{ $total }
 admin-codes-title = { $emoji_package } <b>Codes</b> ({ $count })
 admin-codes-empty = There are no codes yet.
-admin-codes-item = { $code } — { $description } ({ $count } links)
+admin-codes-item = { $code }
 admin-code-detail-title =
     { $emoji_package } <b>{ $code }</b>
 

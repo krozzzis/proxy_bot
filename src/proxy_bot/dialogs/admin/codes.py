@@ -63,15 +63,7 @@ async def codes_list_getter(dialog_manager: DialogManager, **kwargs) -> dict:
     dialog_manager.dialog_data["page"] = page
 
     chunk = codes[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
-    items = [
-        {
-            "id": c.code,
-            "code": c.code,
-            "description": esc(c.description or "—"),
-            "count": len(c.links),
-        }
-        for c in chunk
-    ]
+    items = [{"id": c.code, "code": esc(c.code)} for c in chunk]
     return {
         "has_codes": bool(codes),
         "count": len(codes),
@@ -490,7 +482,7 @@ codes_dialog = Dialog(
         Button(I18N("admin-btn-create-code"), id="add_code", on_click=open_add_code, style=icon("heavy_plus_sign")),
         Column(
             Select(
-                I18N("admin-codes-item", code="{item[code]}", description="{item[description]}", count="{item[count]}"),
+                I18N("admin-codes-item", code="{item[code]}"),
                 id="code_select",
                 item_id_getter=lambda item: item["id"],
                 items="codes",

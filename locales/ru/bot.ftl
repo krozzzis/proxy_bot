@@ -113,7 +113,7 @@ admin-create-code-done = { $emoji_white_check_mark } Код «{ $code }» соз
 admin-page-indicator = · { $page }/{ $total }
 admin-codes-title = { $emoji_package } <b>Коды</b> ({ $count })
 admin-codes-empty = Пока нет ни одного кода.
-admin-codes-item = { $code } — { $description } ({ $count } ссылок)
+admin-codes-item = { $code }
 admin-code-detail-title =
     { $emoji_package } <b>{ $code }</b>
 
