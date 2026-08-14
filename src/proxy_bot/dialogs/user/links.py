@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram.fsm.state import State, StatesGroup
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Select, SwitchTo
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, Multi
 
+from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.storage.models import LINK_TYPE_FIX, LINK_TYPE_REMNAWAVE, Code, RemnawaveAccount, User
+from proxy_bot.utils.audit import actor
 from proxy_bot.utils.formatting import format_links
 from proxy_bot.utils.html import esc
 from proxy_bot.utils.subscription_display import fetch_subscription_lines
@@ -16,10 +20,13 @@ from ..common import BRANDED_LOGO_MEDIA, branded_logo_getter, icon
 from ..widgets import I18N
 from .enter_code import EnterCode
 
+logger = logging.getLogger(__name__)
+
 
 class Links(StatesGroup):
     main = State()
     detail = State()
+    confirm_unsubscribe = State()
 
 
 # Shared between Links.main (inline, when there's exactly one code - no
@@ -89,7 +96,7 @@ async def _build_detail(dialog_manager: DialogManager, db_user: User, code_recor
     targets: dict[int, tuple[str, RemnawaveAccount]] = {}
     if remnawave_active and remnawave is not None:
         for idx, link in enumerate(code_record.links):
-            if link.type != LINK_TYPE_REMNAWAVE:
+            if link.type != LINK_TYPE_REMNAWAVE or link.disabled:
                 continue
             target = await _remnawave_target(storage, db_user, link.squad_id)
             if target is not None:
@@ -112,6 +119,8 @@ async def _build_detail(dialog_manager: DialogManager, db_user: User, code_recor
 
     entries: list[tuple[str, str, str]] = []
     for idx, link in enumerate(code_record.links):
+        if link.disabled:
+            continue
         if link.type == LINK_TYPE_FIX:
             entries.append((link.name, link.url, ""))
             continue
@@ -193,6 +202,71 @@ async def on_code_selected(_callback, _select, manager: DialogManager, item_id: 
     await manager.switch_to(Links.detail)
 
 
+async def on_open_unsubscribe_from_main(_callback, _button, manager: DialogManager) -> None:
+    # Links.main only ever shows the "Unsubscribe" button under
+    # `when="single"` (see links_getter), so there's exactly one held code
+    # to target - re-derive it the same filtered way links_getter does
+    # (a code since deleted from codes.toml doesn't count) rather than
+    # trusting db_user.codes[0], which could point at a stale/gone one.
+    storage: Storage = manager.middleware_data["storage"]
+    user = manager.middleware_data["event_from_user"]
+    db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
+    live_codes = [code for code in db_user.codes if await storage.codes.get(code) is not None]
+    if len(live_codes) != 1:
+        return
+    manager.dialog_data["unsubscribe_code"] = live_codes[0]
+    await manager.switch_to(Links.confirm_unsubscribe)
+
+
+async def on_open_unsubscribe_from_detail(_callback, _button, manager: DialogManager) -> None:
+    code_id = manager.dialog_data.get("selected_code")
+    if not code_id:
+        return
+    manager.dialog_data["unsubscribe_code"] = code_id
+    await manager.switch_to(Links.confirm_unsubscribe)
+
+
+async def confirm_unsubscribe_getter(dialog_manager: DialogManager, **kwargs) -> dict:
+    storage: Storage = dialog_manager.middleware_data["storage"]
+    user = dialog_manager.middleware_data["event_from_user"]
+    db_user = await storage.users.get_or_create(user.id, user.username, user.full_name)
+
+    code_id = dialog_manager.dialog_data.get("unsubscribe_code")
+    code_record = await storage.codes.get(code_id) if code_id else None
+    if code_record is None or code_id not in db_user.codes:
+        # Revoked, renamed, or already given up between render and click -
+        # same bounce-to-list guard as detail_getter.
+        await dialog_manager.switch_to(Links.main)
+        return {"code": "", "description": ""}
+
+    return {
+        "code": esc(code_record.code),
+        "description": esc(code_record.description or code_record.code),
+    }
+
+
+async def on_confirm_unsubscribe(_callback, _button, manager: DialogManager) -> None:
+    storage: Storage = manager.middleware_data["storage"]
+    user = manager.middleware_data["event_from_user"]
+    code_id = manager.dialog_data.pop("unsubscribe_code", None)
+    if not code_id:
+        await manager.switch_to(Links.main)
+        return
+
+    if await storage.users.remove_code(user.id, code_id):
+        remnawave = manager.middleware_data.get("remnawave")
+        await sync_remnawave_access(storage, remnawave, user.id)
+        logger.info("%s gave up their own code %r", actor(user), code_id)
+        manager.dialog_data["banner"] = "link-unsubscribed-done"
+    manager.dialog_data.pop("selected_code", None)
+    await manager.switch_to(Links.main)
+
+
+async def on_cancel_unsubscribe(_callback, _button, manager: DialogManager) -> None:
+    manager.dialog_data.pop("unsubscribe_code", None)
+    await manager.switch_to(Links.main)
+
+
 links_dialog = Dialog(
     Window(
         BRANDED_LOGO_MEDIA,
@@ -231,6 +305,13 @@ links_dialog = Dialog(
             on_click=open_enter_code,
             style=icon("heavy_plus_sign", ButtonStyle.PRIMARY),
         ),
+        Button(
+            I18N("link-btn-unsubscribe"),
+            id="open_unsubscribe_from_main",
+            on_click=on_open_unsubscribe_from_main,
+            when="single",
+            style=icon("no_entry_sign", ButtonStyle.DANGER),
+        ),
         Cancel(I18N("menu-btn-back"), style=icon("arrow_backward")),
         state=Links.main,
         getter=[links_getter, branded_logo_getter],
@@ -238,9 +319,33 @@ links_dialog = Dialog(
     Window(
         BRANDED_LOGO_MEDIA,
         _DETAIL_CONTENT,
+        Button(
+            I18N("link-btn-unsubscribe"),
+            id="open_unsubscribe_from_detail",
+            on_click=on_open_unsubscribe_from_detail,
+            style=icon("no_entry_sign", ButtonStyle.DANGER),
+        ),
         SwitchTo(I18N("menu-btn-back"), id="back_to_list", state=Links.main, style=icon("arrow_backward")),
         state=Links.detail,
         getter=[detail_getter, branded_logo_getter],
+    ),
+    Window(
+        BRANDED_LOGO_MEDIA,
+        I18N("link-unsubscribe-confirm", code="{code}", description="{description}"),
+        Button(
+            I18N("link-btn-unsubscribe-confirm"),
+            id="confirm_unsubscribe",
+            on_click=on_confirm_unsubscribe,
+            style=icon("no_entry_sign", ButtonStyle.DANGER),
+        ),
+        Button(
+            I18N("link-btn-unsubscribe-cancel"),
+            id="cancel_unsubscribe",
+            on_click=on_cancel_unsubscribe,
+            style=icon("arrow_backward"),
+        ),
+        state=Links.confirm_unsubscribe,
+        getter=[confirm_unsubscribe_getter, branded_logo_getter],
     ),
     on_start=on_start,
     on_process_result=on_enter_code_result,

@@ -48,6 +48,16 @@ link-detail-header =
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.
 link-none = У вас пока нет ни одной подписки. Нажмите «Ввести код», чтобы получить доступ.
 link-banned-notice = { $emoji_no_entry_sign } <b>Ваша подписка заблокирована администратором.</b>
+link-btn-unsubscribe = Отказаться от подписки
+link-unsubscribe-confirm =
+    { $emoji_no_entry_sign } <b>Отказаться от подписки «{ $code }»?</b>
+
+    { $description }
+
+    Доступ будет отключён немедленно. Чтобы пользоваться подпиской снова, потребуется ввести код заново.
+link-btn-unsubscribe-confirm = Да, отказаться
+link-btn-unsubscribe-cancel = Нет, оставить
+link-unsubscribed-done = { $emoji_white_check_mark } Вы отказались от подписки. Доступ отключён.
 
 sub-expiry-normal = Срок действия: до { $date }
 sub-expiry-eternal = Срок действия: неограниченно { $emoji_infinity }

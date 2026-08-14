@@ -48,6 +48,16 @@ link-detail-header =
 link-help-hint = Run /help to see how to use your subscription.
 link-none = You don't have any subscriptions yet. Tap "Enter code" to get access.
 link-banned-notice = { $emoji_no_entry_sign } <b>Your subscription has been blocked by an administrator.</b>
+link-btn-unsubscribe = Give up this subscription
+link-unsubscribe-confirm =
+    { $emoji_no_entry_sign } <b>Give up subscription "{ $code }"?</b>
+
+    { $description }
+
+    Access will be revoked immediately. To use this subscription again you'll need to enter its code once more.
+link-btn-unsubscribe-confirm = Yes, give it up
+link-btn-unsubscribe-cancel = No, keep it
+link-unsubscribed-done = { $emoji_white_check_mark } You gave up this subscription. Access has been revoked.
 
 sub-expiry-normal = Subscription: until { $date }
 sub-expiry-eternal = Subscription: unlimited { $emoji_infinity }
