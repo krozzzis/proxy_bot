@@ -31,6 +31,10 @@ _REMNAWAVE_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="remnaw
     "white_check_mark", ButtonStyle.SUCCESS, when="remnawave_disabled"
 )
 
+_LINK_DISABLE_TOGGLE_STYLE = icon("no_entry_sign", ButtonStyle.DANGER, when="link_not_disabled") | icon(
+    "white_check_mark", ButtonStyle.SUCCESS, when="link_disabled"
+)
+
 
 async def on_dialog_start(_start_data: object, manager: DialogManager) -> None:
     if not await ensure_admin(manager):
@@ -190,6 +194,8 @@ async def link_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> d
         "is_fix": link.type == LINK_TYPE_FIX,
         "can_move_up": index > 0,
         "can_move_down": index < len(code.links) - 1,
+        "link_disabled": link.disabled,
+        "link_not_disabled": not link.disabled,
     }
 
 
@@ -256,6 +262,41 @@ async def on_delete_current_link(callback: CallbackQuery, _button: Button, manag
                 await sync_remnawave_access(storage, remnawave, holder.user_id)
         await callback.answer(popup_text(i18n, "admin-code-link-removed"))
     await manager.switch_to(AdminCodes.links)
+
+
+async def on_toggle_link_disabled(callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
+    if not await ensure_admin(manager):
+        await leave_admin_area(manager)
+        return
+
+    storage: Storage = manager.middleware_data["storage"]
+    i18n = manager.middleware_data["i18n"]
+    admin = manager.middleware_data["event_from_user"]
+    code_id = manager.dialog_data.get("selected_code")
+    index = manager.dialog_data.get("edit_link_index")
+    if index is None:
+        return
+
+    code = await storage.codes.get(code_id)
+    if code is None or not (0 <= index < len(code.links)):
+        return
+
+    link = code.links[index]
+    new_state = not link.disabled
+    if not await storage.codes.set_link_disabled(code_id, index, new_state):
+        return
+
+    logger.info("%s %s a link in code %r", actor(admin), "disabled" if new_state else "enabled", code_id)
+    if link.type == LINK_TYPE_REMNAWAVE:
+        # Only a remnawave-type link's disabled state feeds
+        # compute_remnawave_grants - resync every current holder now instead
+        # of waiting for each one's next unrelated code grant/revoke.
+        remnawave = manager.middleware_data.get("remnawave")
+        for holder in await storage.users.users_with_code(code_id):
+            await sync_remnawave_access(storage, remnawave, holder.user_id)
+
+    popup_key = "admin-code-link-disabled-done" if new_state else "admin-code-link-enabled-done"
+    await callback.answer(popup_text(i18n, popup_key), show_alert=True)
 
 
 async def open_add_link(_callback: CallbackQuery, _button: Button, manager: DialogManager) -> None:
@@ -733,6 +774,16 @@ codes_dialog = Dialog(
             style=icon("link"),
         ),
         Button(I18N("admin-btn-rename-link"), id="rename_link", on_click=open_rename_link, when="found", style=icon("pencil2")),
+        Button(
+            Case(
+                {True: I18N("admin-btn-enable-link"), False: I18N("admin-btn-disable-link")},
+                selector="link_disabled",
+            ),
+            id="toggle_link_disabled",
+            on_click=on_toggle_link_disabled,
+            when="found",
+            style=_LINK_DISABLE_TOGGLE_STYLE,
+        ),
         Button(I18N("admin-btn-move-up"), id="move_link_up", on_click=on_link_detail_move_up, when="can_move_up"),
         Button(I18N("admin-btn-move-down"), id="move_link_down", on_click=on_link_detail_move_down, when="can_move_down"),
         Button(

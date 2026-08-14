@@ -29,8 +29,12 @@ def link_row(link: Link, i18n, squad_name: str | None = None) -> str:
         type_label = i18n.get("admin-code-link-type-fix")
         value = f"<code>{esc(link.url)}</code>"
     if link.name:
-        return i18n.get("admin-code-link-row-named", name=esc(link.name), type=type_label, value=value)
-    return i18n.get("admin-code-link-row", type=type_label, value=value)
+        row = i18n.get("admin-code-link-row-named", name=esc(link.name), type=type_label, value=value)
+    else:
+        row = i18n.get("admin-code-link-row", type=type_label, value=value)
+    if link.disabled:
+        return i18n.get("admin-code-link-row-disabled", row=row)
+    return row
 
 
 # Telegram button text has no markup, so a value this long would just spill
@@ -47,10 +51,14 @@ def link_button_label(link: Link, i18n, squad_name: str | None = None) -> str:
         "admin-code-link-type-remnawave" if link.type == LINK_TYPE_REMNAWAVE else "admin-code-link-type-fix"
     )
     if link.name:
-        return f"{link.name} ({type_label})"
-    if link.type == LINK_TYPE_REMNAWAVE:
-        return f"{type_label}: {squad_name}" if squad_name else type_label
-    url = link.url
-    if len(url) > _LINK_BUTTON_URL_MAX:
-        url = url[: _LINK_BUTTON_URL_MAX - 1] + "…"
-    return f"{type_label}: {url}"
+        label = f"{link.name} ({type_label})"
+    elif link.type == LINK_TYPE_REMNAWAVE:
+        label = f"{type_label}: {squad_name}" if squad_name else type_label
+    else:
+        url = link.url
+        if len(url) > _LINK_BUTTON_URL_MAX:
+            url = url[: _LINK_BUTTON_URL_MAX - 1] + "…"
+        label = f"{type_label}: {url}"
+    if link.disabled:
+        return f"🚫 {label}"
+    return label

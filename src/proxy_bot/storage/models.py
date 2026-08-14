@@ -31,6 +31,14 @@ class Link:
     # at" - dropped from rendering and contributes no grant, same as an
     # unlinked account (see services.remnawave_sync).
     squad_id: str = ""
+    # Admin override: hide this link from every holder (dialogs/user/links.py)
+    # and, for a `remnawave`-type link, stop it contributing its Squad to any
+    # holder's grant (services.remnawave_sync.compute_remnawave_grants) -
+    # without dropping the entry itself, unlike removing it outright. Still
+    # counts as "used" for available_squads() (dialogs/admin/links_common.py),
+    # so its Squad isn't offered for a second link while this one merely sits
+    # disabled.
+    disabled: bool = False
 
 
 def parse_link(raw: str | dict) -> Link:
@@ -50,6 +58,7 @@ def parse_link(raw: str | dict) -> Link:
         name=raw.get("name", ""),
         url=raw.get("url", ""),
         squad_id=raw.get("squad_id", ""),
+        disabled=raw.get("disabled", False),
     )
 
 
@@ -62,7 +71,13 @@ def parse_links(raw_links: list) -> list[Link]:
 
 
 def dump_link(link: Link) -> dict[str, Any]:
-    return {"type": link.type, "name": link.name, "url": link.url, "squad_id": link.squad_id}
+    return {
+        "type": link.type,
+        "name": link.name,
+        "url": link.url,
+        "squad_id": link.squad_id,
+        "disabled": link.disabled,
+    }
 
 
 @dataclass

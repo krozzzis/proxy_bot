@@ -31,9 +31,10 @@ async def compute_remnawave_grants(storage: Storage, db_user: User) -> dict[str,
     each Squad's own `server`. Empty if the user's own `remnawave_disabled`
     override is set (regardless of what their codes would otherwise grant),
     and a code's contribution is skipped entirely if that code's own
-    `remnawave_disabled` is set. A link's `squad_id` pointing at a
-    since-deleted Squad is skipped silently - same as any other "nothing to
-    point at" dangling reference.
+    `remnawave_disabled` is set, as is any individual link with its own
+    `disabled` set (see storage.models.Link). A link's `squad_id` pointing
+    at a since-deleted Squad is skipped silently - same as any other
+    "nothing to point at" dangling reference.
     """
     if db_user.remnawave_disabled:
         return {}
@@ -44,7 +45,7 @@ async def compute_remnawave_grants(storage: Storage, db_user: User) -> dict[str,
         if code_record is None or code_record.remnawave_disabled:
             continue
         for link in code_record.links:
-            if link.type != LINK_TYPE_REMNAWAVE or not link.squad_id:
+            if link.type != LINK_TYPE_REMNAWAVE or not link.squad_id or link.disabled:
                 continue
             squad = await storage.squads.get(link.squad_id)
             if squad is None:
