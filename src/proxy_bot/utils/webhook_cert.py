@@ -59,3 +59,34 @@ def ensure_self_signed_cert(cert_path: Path, privkey_path: Path, host: str) -> N
         check=True,
         capture_output=True,
     )
+
+
+def is_self_signed(cert_path: Path) -> bool:
+    """Whether the cert at `cert_path` is self-signed (issuer == subject) -
+    used by main.py's set_webhook call to decide whether `certificate=`
+    needs pinning: required for a self-signed cert (Telegram has no CA
+    chain to validate it against otherwise), actively wrong for a real
+    CA-issued one (pins Telegram to one exact file instead of letting it
+    validate the chain normally, defeating the point of using a CA cert -
+    and leaves delivery to break silently whenever that pinned file expires,
+    rather than just working across a renewal like a CA-validated cert
+    would).
+
+    Not tracked via a config flag or "did ensure_self_signed_cert just
+    generate this" - either approach goes stale the moment an operator
+    swaps in a real cert without updating a knob, or restarts a process
+    that's carried the *same* self-signed file across several boots (which
+    ensure_self_signed_cert's own persistence deliberately does). Reading
+    the file's own issuer/subject is the one signal that can't drift out of
+    sync with what's actually on disk.
+    """
+    result = subprocess.run(
+        ["openssl", "x509", "-in", str(cert_path), "-noout", "-issuer", "-subject"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    lines = result.stdout.splitlines()
+    issuer = next((line.removeprefix("issuer=") for line in lines if line.startswith("issuer=")), None)
+    subject = next((line.removeprefix("subject=") for line in lines if line.startswith("subject=")), None)
+    return issuer is not None and issuer == subject

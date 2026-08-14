@@ -31,7 +31,7 @@ from proxy_bot.remnawave import RemnawaveClient, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
-from proxy_bot.utils.webhook_cert import ensure_self_signed_cert
+from proxy_bot.utils.webhook_cert import ensure_self_signed_cert, is_self_signed
 
 logger = logging.getLogger(__name__)
 
@@ -221,13 +221,20 @@ async def _run_webhook(bot: Bot, dp: Dispatcher, config: Config) -> bool:
     # must be spelled out explicitly or the callback never arrives.
     port_suffix = "" if config.webapp_port == 443 else f":{config.webapp_port}"
     webhook_url = f"https://{config.webhook_host}{port_suffix}{config.webhook_path}"
+    # `certificate=` pins Telegram to this exact file instead of letting it
+    # validate the chain normally - required for a self-signed cert (no CA
+    # to validate it against otherwise), wrong for a real CA-issued one:
+    # pinning would keep working right up until this file expires, then
+    # break outright rather than just carrying on across a renewal the way
+    # normal CA validation would.
+    pin_cert = is_self_signed(config.webhook_cert_path)
     await bot.set_webhook(
         url=webhook_url,
-        certificate=FSInputFile(config.webhook_cert_path),
+        certificate=FSInputFile(config.webhook_cert_path) if pin_cert else None,
         secret_token=config.webhook_secret_token,
         drop_pending_updates=True,
     )
-    logger.info("Webhook registered at %s", webhook_url)
+    logger.info("Webhook registered at %s (cert %s)", webhook_url, "self-signed, pinned" if pin_cert else "CA-issued")
 
     # dp.start_polling() (the other branch) installs its own SIGINT/SIGTERM
     # handling; this branch needs the same so `docker stop` (SIGTERM) still
