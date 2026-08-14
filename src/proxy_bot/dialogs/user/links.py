@@ -295,7 +295,7 @@ links_dialog = Dialog(
                 item_id_getter=lambda item: item["id"],
                 items="codes",
                 on_click=on_code_selected,
-                style=icon("small_blue_diamond"),
+                style=icon("rocket"),
             ),
             when="multi",
         ),

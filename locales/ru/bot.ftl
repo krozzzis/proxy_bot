@@ -42,7 +42,7 @@ code-prompt-again = Введите новый код доступа.
 link-header = { $emoji_key } <b>Ваши подписки</b>
 link-choose-prompt = Выберите подписку:
 link-detail-header =
-    { $emoji_small_blue_diamond } <b>{ $code }</b>
+    { $emoji_rocket } <b>{ $code }</b>
 
     { $emoji_format_quote } { $description } { $emoji_format_quote }
 link-help-hint = Команда /help подскажет, как пользоваться подпиской.

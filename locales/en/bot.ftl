@@ -42,7 +42,7 @@ code-prompt-again = Enter another access code.
 link-header = { $emoji_key } <b>Your subscriptions</b>
 link-choose-prompt = Choose a subscription:
 link-detail-header =
-    { $emoji_small_blue_diamond } <b>{ $code }</b>
+    { $emoji_rocket } <b>{ $code }</b>
 
     { $emoji_format_quote } { $description } { $emoji_format_quote }
 link-help-hint = Run /help to see how to use your subscription.
