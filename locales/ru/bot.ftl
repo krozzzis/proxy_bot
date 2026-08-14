@@ -290,3 +290,10 @@ admin-broadcast-type-voice = Голосовое сообщение
 admin-broadcast-type-video-note = Видео-сообщение
 admin-broadcast-type-sticker = Стикер
 admin-broadcast-type-other = Содержимое
+
+### Webhook
+
+admin-webhook-fallback-notice =
+    ⚠️ Webhook перестал доставлять обновления, бот автоматически переключился на long polling.
+
+    Последняя ошибка Telegram: { $error }

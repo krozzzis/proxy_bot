@@ -6,10 +6,12 @@ import logging
 import signal
 import ssl
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 from aiogram.filters import ExceptionTypeFilter
 from aiogram.types import FSInputFile
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
@@ -32,6 +34,22 @@ from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
 from proxy_bot.utils.webhook_cert import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
+
+# How often the webhook watchdog polls getWebhookInfo, and how fresh a
+# reported delivery failure has to be to count as "currently broken" rather
+# than a stale error frozen from some past incident that already recovered
+# (Telegram never clears last_error_date/last_error_message on success -
+# they just stop advancing). A failure timestamped within the last two
+# check cycles is treated as ongoing.
+_WEBHOOK_CHECK_INTERVAL = 60.0
+_WEBHOOK_ERROR_RECENCY = 2 * _WEBHOOK_CHECK_INTERVAL
+
+# Backoff for retrying the admin fallback notice - deliberately unbounded
+# (not a fixed attempt count): if outbound connectivity is also down when
+# the webhook is first found broken, the notice is only meaningful once it
+# can actually get through, however long that takes.
+_NOTIFY_RETRY_MIN = 5.0
+_NOTIFY_RETRY_MAX = 120.0
 
 
 def _register_background_task(dp: Dispatcher, factory: Callable[[], Awaitable[None]]) -> None:
@@ -104,14 +122,17 @@ async def run() -> None:
 
     try:
         if config.use_webhook:
-            await _run_webhook(bot, dp, config)
+            fell_back = await _run_webhook(bot, dp, config)
+            if fell_back:
+                await _fall_back_to_polling(bot, dp, storage, i18n_middleware.core, config)
+            # else: a clean shutdown signal, not a failure - nothing more to run.
         else:
-            logger.info("Starting bot polling")
             # No-op if no webhook was ever set - safe to call unconditionally
             # here since this branch is polling-only (the webhook branch
-            # below sets one instead of deleting it).
+            # sets one instead of deleting it, and the fallback path above
+            # already deletes it itself before calling _start_polling).
             await bot.delete_webhook(drop_pending_updates=True)
-            await dp.start_polling(bot)
+            await _start_polling(bot, dp)
     finally:
         # SimpleRequestHandler.close() (webhook branch) already closes the
         # bot session as part of the aiohttp app's own shutdown, but a
@@ -122,11 +143,55 @@ async def run() -> None:
             await remnawave.close_all()
 
 
-async def _run_webhook(bot: Bot, dp: Dispatcher, config: Config) -> None:
+async def _start_polling(bot: Bot, dp: Dispatcher) -> None:
+    logger.info("Starting bot polling")
+    await dp.start_polling(bot)
+
+
+async def _watch_webhook_health(bot: Bot) -> None:
+    """Polls getWebhookInfo and returns (doesn't raise) once Telegram
+    reports a delivery failure recent enough to treat the webhook as
+    currently broken - see `_run_webhook`, which races this against its
+    shutdown-signal wait and falls back to polling if this is what won.
+    Never returns on its own otherwise - runs until cancelled.
+
+    Requires *both* a recent `last_error_date` *and* a nonzero
+    `pending_update_count` - Telegram stamps last_error_date on a single
+    failed delivery attempt (a network blip, a momentary 5xx) and then
+    routinely retries and recovers on its own, but never clears that
+    timestamp once the retry succeeds. Recency alone would treat that
+    ordinary blip the same as an actually-broken endpoint and tear down a
+    working webhook over it; a pile of undelivered updates is what
+    distinguishes "really can't reach us" from "reached us, once, a bit
+    slowly".
+    """
+    while True:
+        await asyncio.sleep(_WEBHOOK_CHECK_INTERVAL)
+        try:
+            info = await bot.get_webhook_info()
+        except TelegramAPIError:
+            logger.warning("Webhook health check itself failed to reach Telegram", exc_info=True)
+            continue
+        if info.last_error_date is None or info.pending_update_count == 0:
+            continue
+        age = (datetime.now(UTC) - info.last_error_date).total_seconds()
+        if age <= _WEBHOOK_ERROR_RECENCY:
+            logger.error(
+                "Webhook delivery is failing (%r, %.0fs ago, %d update(s) pending) - falling back to long polling",
+                info.last_error_message,
+                age,
+                info.pending_update_count,
+            )
+            return
+
+
+async def _run_webhook(bot: Bot, dp: Dispatcher, config: Config) -> bool:
     """The webhook counterpart to `dp.start_polling(bot)`: binds an aiohttp
     server directly (no reverse proxy involved - see Config.use_webhook) and
-    registers it with Telegram. Runs until cancelled, same contract as
-    start_polling.
+    registers it with Telegram. Runs until cancelled by a shutdown signal or
+    until `_watch_webhook_health` decides delivery is currently broken -
+    returns True in the latter case (caller should fall back to polling),
+    False for a normal shutdown.
     """
     ensure_self_signed_cert(config.webhook_cert_path, config.webhook_privkey_path, config.webhook_host)
 
@@ -173,10 +238,76 @@ async def _run_webhook(bot: Bot, dp: Dispatcher, config: Config) -> None:
     loop = asyncio.get_running_loop()
     loop.add_signal_handler(signal.SIGTERM, stop_event.set)
     loop.add_signal_handler(signal.SIGINT, stop_event.set)
+
+    watchdog_task = asyncio.create_task(_watch_webhook_health(bot))
+    stop_task = asyncio.create_task(stop_event.wait())
     try:
-        await stop_event.wait()
+        done, pending = await asyncio.wait({watchdog_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        return watchdog_task in done
     finally:
+        # dp.start_polling() installs its own signal handlers on the same
+        # loop when the fallback path below calls it next - remove ours
+        # first so there's exactly one handler per signal at a time, not a
+        # question of which one "wins".
+        loop.remove_signal_handler(signal.SIGTERM)
+        loop.remove_signal_handler(signal.SIGINT)
         await runner.cleanup()
+
+
+async def _notify_admin_fallback(bot: Bot, storage: Storage, i18n_core, config: Config, error_message: str | None) -> None:
+    """Best-effort admin alert that a webhook->polling fallback happened,
+    retried with backoff until it actually gets through - see the
+    `_NOTIFY_RETRY_*` constants' docstring for why there's no attempt cap.
+    Runs as its own background task (not awaited by the fallback path) so a
+    slow/failing outbound connection never delays polling from starting.
+    """
+    admin = await storage.users.get(config.root_admin_id)
+    locale = admin.locale if admin and admin.locale else config.default_locale
+    text = i18n_core.get("admin-webhook-fallback-notice", locale, error=error_message or "—")
+
+    delay = _NOTIFY_RETRY_MIN
+    while True:
+        try:
+            await bot.send_message(config.root_admin_id, text)
+            return
+        except TelegramForbiddenError:
+            # Root admin blocked the bot or never started a chat with it -
+            # no amount of retrying fixes that; give up rather than spin
+            # forever on a condition connectivity can't resolve.
+            logger.warning("Couldn't deliver the webhook-fallback notice - root admin is unreachable", exc_info=True)
+            return
+        except TelegramAPIError:
+            logger.warning("Couldn't deliver the webhook-fallback notice yet, retrying in %.0fs", delay, exc_info=True)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, _NOTIFY_RETRY_MAX)
+
+
+async def _fall_back_to_polling(bot: Bot, dp: Dispatcher, storage: Storage, i18n_core, config: Config) -> None:
+    last_error = None
+    with contextlib.suppress(TelegramAPIError):
+        info = await bot.get_webhook_info()
+        last_error = info.last_error_message
+
+    # Keep whatever updates piled up while the webhook was broken - unlike
+    # a normal polling-mode boot (which deliberately drops a stale backlog),
+    # this is specifically about recovering delivery, not starting fresh.
+    await bot.delete_webhook(drop_pending_updates=False)
+    # Not awaited here - see _notify_admin_fallback's own docstring for why
+    # (a slow/failing send must not delay polling from starting). Assigned
+    # to a local rather than left as a bare create_task() call: asyncio only
+    # holds a weak reference to a task otherwise, so with nothing else
+    # keeping it alive it can be garbage-collected mid-retry-loop. This
+    # local survives for as long as the coroutine frame does, which is the
+    # rest of the process's life - _start_polling below never returns.
+    notify_task = asyncio.create_task(_notify_admin_fallback(bot, storage, i18n_core, config, last_error))
+    try:
+        await _start_polling(bot, dp)
+    finally:
+        notify_task.cancel()
 
 
 def main() -> None:
