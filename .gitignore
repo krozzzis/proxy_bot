@@ -25,3 +25,4 @@ logs/
 
 # Internal notes not meant for the public repo (e.g. security audits)
 docs/
+CLAUDE.md
