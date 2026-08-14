@@ -45,7 +45,7 @@ async def on_dialog_start(start_data: object, dialog_manager: DialogManager) -> 
         return
 
     status, _code_record = await activate_code(storage, remnawave, user, auto_code)
-    if status in ("banned", "invalid"):
+    if status in ("banned", "invalid", "locked"):
         await dialog_manager.start(EnterCode.main, data={"error": status})
     else:
         banner_key = "code-already-added" if status == "already" else "code-accepted"

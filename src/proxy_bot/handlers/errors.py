@@ -14,7 +14,13 @@ logger = logging.getLogger(__name__)
 
 async def _reopen_main_menu(dispatcher: Dispatcher, bot: Bot, fake_update: Update) -> None:
     try:
-        await dispatcher.feed_update(bot=bot, update=fake_update)
+        # skip_rate_limit=True: this synthetic "/start" lands right after
+        # the real update that triggered it (same user, well under
+        # RateLimitMiddleware's per-user interval) - it's an internal
+        # recovery step, not user traffic, and must not be judged as such
+        # or throttled away into a confusing "you're going too fast" notice
+        # instead of the main menu reopening.
+        await dispatcher.feed_update(bot=bot, update=fake_update, skip_rate_limit=True)
     except Exception:
         logger.exception("Failed to reopen main menu after a stale dialog event")
 

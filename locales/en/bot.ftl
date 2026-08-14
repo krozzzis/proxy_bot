@@ -35,9 +35,12 @@ settings-language-title =
 
 code-invalid = { $emoji_x } Code not found. Check it and try again.
 code-banned = { $emoji_no_entry_sign } Your account has been banned by an administrator. Please contact support.
+code-locked = { $emoji_shield } Too many wrong attempts in a row. Please try entering the code again later.
 code-already-added = { $emoji_white_check_mark } This code is already linked to your account.
 code-accepted = { $emoji_white_check_mark } <b>Code accepted!</b>
 code-prompt-again = Enter another access code.
+
+rate-limited = { $emoji_shield } You're going too fast — please slow down.
 
 link-header = { $emoji_key } <b>Your subscriptions</b>
 link-choose-prompt = Choose a subscription:

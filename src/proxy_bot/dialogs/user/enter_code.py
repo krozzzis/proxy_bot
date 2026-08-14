@@ -38,7 +38,7 @@ async def on_code_entered(
     user = message.from_user
 
     status, _code_record = await activate_code(storage, remnawave, user, code_text)
-    if status in ("banned", "invalid"):
+    if status in ("banned", "invalid", "locked"):
         dialog_manager.dialog_data["error"] = status
         return
 
@@ -57,6 +57,7 @@ enter_code_dialog = Dialog(
             {
                 "invalid": Multi(I18N("code-invalid"), I18N("code-prompt-again"), sep="\n\n"),
                 "banned": I18N("code-banned"),
+                "locked": I18N("code-locked"),
                 None: I18N("start-prompt-code"),
             },
             selector="error",

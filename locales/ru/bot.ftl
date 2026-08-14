@@ -35,9 +35,12 @@ settings-language-title =
 
 code-invalid = { $emoji_x } Код не найден. Проверьте правильность ввода и попробуйте ещё раз.
 code-banned = { $emoji_no_entry_sign } Ваш аккаунт заблокирован администратором. Обратитесь в поддержку.
+code-locked = { $emoji_shield } Слишком много неверных попыток подряд. Попробуйте ввести код позже.
 code-already-added = { $emoji_white_check_mark } Этот код уже добавлен к вашему аккаунту.
 code-accepted = { $emoji_white_check_mark } <b>Код принят!</b>
 code-prompt-again = Введите новый код доступа.
+
+rate-limited = { $emoji_shield } Слишком быстро — подождите немного.
 
 link-header = { $emoji_key } <b>Ваши подписки</b>
 link-choose-prompt = Выберите подписку:

@@ -26,7 +26,7 @@ from proxy_bot.fsm import build_fsm_storage
 from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
 from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
-from proxy_bot.middlewares import InteractionLoggingMiddleware
+from proxy_bot.middlewares import InteractionLoggingMiddleware, RateLimitMiddleware
 from proxy_bot.remnawave import RemnawaveClient, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
@@ -99,6 +99,13 @@ async def run() -> None:
     interaction_logger = InteractionLoggingMiddleware()
     dp.message.outer_middleware(interaction_logger)
     dp.callback_query.outer_middleware(interaction_logger)
+
+    # Registered after the logger, not before - every attempt (including a
+    # throttled one) still gets an audit line, but throttled ones never
+    # reach a handler.
+    rate_limiter = RateLimitMiddleware()
+    dp.message.outer_middleware(rate_limiter)
+    dp.callback_query.outer_middleware(rate_limiter)
 
     for router in get_command_routers():
         dp.include_router(router)
