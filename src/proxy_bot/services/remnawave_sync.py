@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from proxy_bot.remnawave import RemnawaveClient, RemnawaveError, RemnawaveRegistry, RemnawaveUser
+from proxy_bot.remnawave import RemnawaveAccountCache, RemnawaveClient, RemnawaveError, RemnawaveRegistry, RemnawaveUser
+from proxy_bot.remnawave.cache import resolve_account_id
 from proxy_bot.storage import Storage, User
 from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
 from proxy_bot.utils.audit import actor_id
@@ -54,7 +55,9 @@ async def compute_remnawave_grants(storage: Storage, db_user: User) -> dict[str,
     return {server: sorted(uuids) for server, uuids in grants.items()}
 
 
-async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveRegistry | None, user_id: int) -> None:
+async def sync_remnawave_access(
+    storage: Storage, remnawave: RemnawaveRegistry | None, account_cache: RemnawaveAccountCache, user_id: int
+) -> None:
     """Recompute this user's Remnawave squad membership, per server, from
     compute_remnawave_grants(), provisioning (or re-linking) an account on
     first grant for a server. Call after any code grant/revoke, or after
@@ -72,7 +75,7 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveRegistry |
     grants = await compute_remnawave_grants(storage, db_user)
     # The union, not just servers with a grant: a server whose grant just
     # dropped to nothing but still has a live account needs
-    # update_user_squads(uuid, []) too, or the panel-side membership goes
+    # update_user_squads(id, []) too, or the panel-side membership goes
     # stale instead of following the revoke.
     servers = set(grants) | set(db_user.remnawave_accounts)
 
@@ -89,27 +92,45 @@ async def sync_remnawave_access(storage: Storage, remnawave: RemnawaveRegistry |
             continue
 
         try:
-            if account is not None and account.uuid:
-                await client.update_user_squads(account.uuid, squad_list)
+            account_id = await account_cache.get(server, user_id)
+            if account_id is not None:
+                await client.update_user_squads(account_id, squad_list)
                 continue
 
+            # Cache miss: re-resolve by telegramId. A manually-linked
+            # account (dialogs/admin/link_remnawave.py) never gets a
+            # panel-side telegramId set, so this always misses for one and
+            # falls through to provisioning a fresh "tg_" account below -
+            # a known, accepted tradeoff (see remnawave.cache's docstring)
+            # rather than this bot writing telegramId onto an account an
+            # admin explicitly picked.
             rw_user = await client.get_user_by_telegram_id(user_id)
+            manual = account.linked_manually if account is not None else False
             if rw_user is None:
                 if not squad_list:
                     continue
                 rw_user = await _create_account(client, db_user, squad_list)
+                manual = False
             else:
-                await client.update_user_squads(rw_user.uuid, squad_list)
+                await client.update_user_squads(rw_user.id, squad_list)
+            await account_cache.set(server, user_id, rw_user.id)
             await storage.users.set_remnawave_account(
-                user_id, server, rw_user.uuid, rw_user.subscription_url, rw_user.username, manual=False
+                user_id, server, rw_user.subscription_url, rw_user.username, manual=manual
             )
         except RemnawaveError:
+            # A cached id can be the reason this failed (deleted on the
+            # panel since it was resolved) - drop it so the next sync
+            # re-resolves instead of retrying the same dead id for the rest
+            # of its TTL.
+            await account_cache.invalidate(server, user_id)
             logger.warning(
                 "Remnawave sync failed for %s on server %r", actor_id(user_id, db_user.username), server, exc_info=True
             )
 
 
-async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveRegistry, db_user: User) -> None:
+async def sync_ban_state_from_remnawave(
+    storage: Storage, remnawave: RemnawaveRegistry, account_cache: RemnawaveAccountCache, db_user: User
+) -> None:
     """The pull direction of ban/unban sync: if any of `db_user`'s linked
     accounts was disabled or re-enabled directly on a Remnawave panel (not
     through this bot), reflect that into the local `banned` flag. The push
@@ -128,15 +149,20 @@ async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveRe
     to, so this just logs and leaves the local flag untouched.
     """
     statuses: set[bool] = set()
-    for server, account in db_user.remnawave_accounts.items():
-        if not account.uuid:
-            continue
+    for server in db_user.remnawave_accounts:
         client = remnawave.get(server)
         if client is None:
             continue
         try:
-            rw_user = await client.get_user_by_uuid(account.uuid)
+            account_id = await resolve_account_id(account_cache, remnawave, server, db_user.user_id)
+            if account_id is None:
+                continue
+            rw_user = await client.get_user_by_id(account_id)
         except RemnawaveError:
+            # The cached id may itself be why this failed (deleted on the
+            # panel since) - drop it so the next sweep re-resolves instead
+            # of retrying the same dead id for the rest of its TTL.
+            await account_cache.invalidate(server, db_user.user_id)
             logger.warning(
                 "Failed to fetch Remnawave status for %s on server %r",
                 actor_id(db_user.user_id, db_user.username),
@@ -174,7 +200,9 @@ async def sync_ban_state_from_remnawave(storage: Storage, remnawave: RemnawaveRe
     )
 
 
-async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveRegistry | None, interval: float = 300.0) -> None:
+async def run_remnawave_ban_sync(
+    storage: Storage, remnawave: RemnawaveRegistry | None, account_cache: RemnawaveAccountCache, interval: float = 300.0
+) -> None:
     """Periodic sweep for the pull direction of ban-state sync (see
     sync_ban_state_from_remnawave): every Remnawave-linked user's panel
     status is checked, and the local `banned` flag updated to match if it
@@ -187,12 +215,12 @@ async def run_remnawave_ban_sync(storage: Storage, remnawave: RemnawaveRegistry 
     while True:
         for db_user in await storage.users.all():
             if db_user.remnawave_accounts:
-                await sync_ban_state_from_remnawave(storage, remnawave, db_user)
+                await sync_ban_state_from_remnawave(storage, remnawave, account_cache, db_user)
         await asyncio.sleep(interval)
 
 
 async def retire_auto_provisioned_account(
-    remnawave: RemnawaveClient | None, db_user: User, keep_uuid: str
+    remnawave: RemnawaveClient | None, db_user: User, keep_id: str
 ) -> str | None:
     """Clean up the account this user would have gotten from `_create_account`
     (the `tg_<telegram_username>` naming convention) on the same server as
@@ -216,12 +244,12 @@ async def retire_auto_provisioned_account(
     auto_username = f"tg_{db_user.username}"
     try:
         auto_user = await remnawave.get_user_by_username(auto_username)
-        if auto_user is None or auto_user.uuid == keep_uuid:
+        if auto_user is None or str(auto_user.id) == keep_id:
             return None
         if auto_user.used_traffic_bytes > 0:
-            await remnawave.disable_user(auto_user.uuid)
+            await remnawave.disable_user(auto_user.id)
             return "disabled"
-        await remnawave.delete_user(auto_user.uuid)
+        await remnawave.delete_user(auto_user.id)
         return "deleted"
     except RemnawaveError:
         logger.warning(

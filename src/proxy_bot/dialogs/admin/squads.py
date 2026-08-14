@@ -12,7 +12,7 @@ from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Multi
 from pydantic import StringConstraints, TypeAdapter
 
-from proxy_bot.remnawave import RemnawaveError, RemnawaveRegistry
+from proxy_bot.remnawave import RemnawaveAccountCache, RemnawaveError, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
@@ -174,7 +174,9 @@ async def _affected_user_ids(storage: Storage, squad_id: str) -> set[int]:
     return user_ids
 
 
-async def _resync_affected_users(storage: Storage, remnawave: RemnawaveRegistry | None, user_ids: set[int]) -> None:
+async def _resync_affected_users(
+    storage: Storage, remnawave: RemnawaveRegistry | None, remnawave_account_cache: RemnawaveAccountCache, user_ids: set[int]
+) -> None:
     """Fire-and-forget background sweep: a Squad edit/delete can affect an
     arbitrary number of holders, and each sync_remnawave_access() call is
     its own round trip to the panel - run these after the triggering
@@ -182,7 +184,7 @@ async def _resync_affected_users(storage: Storage, remnawave: RemnawaveRegistry 
     rather than making them wait on however many users are affected."""
     for user_id in user_ids:
         try:
-            await sync_remnawave_access(storage, remnawave, user_id)
+            await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
         except Exception:
             logger.exception("Failed to resync Remnawave access for user %s after a Squad change", user_id)
 
@@ -322,9 +324,10 @@ async def on_edit_internal_squads_done(callback: CallbackQuery, _button: Button,
     logger.info("%s set internal squads of Squad %r to %s", actor(admin), squad_id, internal_squad_uuids)
 
     remnawave = manager.middleware_data.get("remnawave")
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
     user_ids = await _affected_user_ids(storage, squad_id)
     if user_ids:
-        asyncio.create_task(_resync_affected_users(storage, remnawave, user_ids))
+        asyncio.create_task(_resync_affected_users(storage, remnawave, remnawave_account_cache, user_ids))
         logger.info("%s triggered a background Remnawave resync for %d holder(s) of Squad %r", actor(admin), len(user_ids), squad_id)
 
     await callback.answer(popup_text(i18n, "admin-squad-internal-squads-updated"))
@@ -346,7 +349,8 @@ async def on_delete_squad(callback: CallbackQuery, _button: Button, manager: Dia
         logger.info("%s deleted Squad %r", actor(admin), squad_id)
         if user_ids:
             remnawave = manager.middleware_data.get("remnawave")
-            asyncio.create_task(_resync_affected_users(storage, remnawave, user_ids))
+            remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+            asyncio.create_task(_resync_affected_users(storage, remnawave, remnawave_account_cache, user_ids))
             logger.info("%s triggered a background Remnawave resync for %d holder(s) of deleted Squad %r", actor(admin), len(user_ids), squad_id)
         await callback.answer(popup_text(i18n, "admin-squad-deleted-done"), show_alert=True)
     await manager.switch_to(AdminSquads.list)

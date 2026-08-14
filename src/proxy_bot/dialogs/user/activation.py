@@ -6,7 +6,7 @@ from typing import Literal
 
 from aiogram.types import User
 
-from proxy_bot.remnawave import RemnawaveRegistry
+from proxy_bot.remnawave import RemnawaveAccountCache, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Code, Storage
 from proxy_bot.storage.models import LINK_TYPE_REMNAWAVE
@@ -69,7 +69,11 @@ _attempt_limiter = _CodeAttemptLimiter(
 
 
 async def activate_code(
-    storage: Storage, remnawave: RemnawaveRegistry | None, user: User, code_text: str
+    storage: Storage,
+    remnawave: RemnawaveRegistry | None,
+    remnawave_account_cache: RemnawaveAccountCache,
+    user: User,
+    code_text: str,
 ) -> tuple[ActivationStatus, Code | None]:
     """Try to activate `code_text` for `user`. Shared by manual entry
     (enter_code.on_code_entered) and /start deep-link auto-activation
@@ -105,5 +109,5 @@ async def activate_code(
     _attempt_limiter.record_valid(user.id)
     logger.info("%s activated code %r", actor(user), code)
     if any(link.type == LINK_TYPE_REMNAWAVE for link in code_record.links):
-        await sync_remnawave_access(storage, remnawave, user.id)
+        await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user.id)
     return "added", code_record

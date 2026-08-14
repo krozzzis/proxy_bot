@@ -93,7 +93,7 @@ async def _resolve_remnawave_username(username_text: str, manager: DialogManager
     if rw_user is None:
         return "admin-link-remnawave-not-found"
 
-    manager.dialog_data["found_uuid"] = rw_user.uuid
+    manager.dialog_data["found_id"] = str(rw_user.id)
     manager.dialog_data["found_username"] = rw_user.username
     manager.dialog_data["found_subscription_url"] = rw_user.subscription_url
     return None
@@ -135,7 +135,7 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
     admin = manager.middleware_data["event_from_user"]
     user_id = manager.dialog_data["user_id"]
     server = manager.dialog_data["server"]
-    uuid = manager.dialog_data["found_uuid"]
+    found_id = manager.dialog_data["found_id"]
     found_username = manager.dialog_data.get("found_username")
     subscription_url = manager.dialog_data.get("found_subscription_url")
 
@@ -145,14 +145,24 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
     if target_user is None:
         target_user = await storage.users.get_or_create(user_id, username=None, full_name="")
 
-    await storage.users.set_remnawave_account(user_id, server, uuid, subscription_url, found_username, manual=True)
+    await storage.users.set_remnawave_account(user_id, server, subscription_url, found_username, manual=True)
     remnawave = manager.middleware_data.get("remnawave")
-    await sync_remnawave_access(storage, remnawave, user_id)
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+    # Seed the cache with the id just resolved above (a pure local-cache
+    # write, not a panel write) - without this, the sync_remnawave_access
+    # call right below would miss (this account's telegramId isn't set on
+    # the panel - see remnawave.cache's docstring) and immediately
+    # provision a duplicate "tg_" account instead of granting the one just
+    # picked.
+    await remnawave_account_cache.set(server, user_id, int(found_id))
+    await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
 
     target = actor_id(user_id, target_user.username)
     logger.info("%s linked Remnawave account %r on server %r to %s", actor(admin), found_username, server, target)
 
-    retired = await retire_auto_provisioned_account(remnawave.get(server) if remnawave is not None else None, target_user, keep_uuid=uuid)
+    retired = await retire_auto_provisioned_account(
+        remnawave.get(server) if remnawave is not None else None, target_user, keep_id=found_id
+    )
     if retired is not None:
         logger.info(
             "%s retired (%s) auto-provisioned Remnawave account on server %r for %s", actor(admin), retired, server, target

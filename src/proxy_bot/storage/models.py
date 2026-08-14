@@ -110,12 +110,21 @@ class Code:
 
 @dataclass
 class RemnawaveAccount:
-    """One holder's Remnawave account on one configured server - a holder
-    can have at most one account per server (storage.User.remnawave_accounts
-    is keyed by server name), since Remnawave accounts and their internal
-    squads are both scoped to a single panel."""
+    """Display-only metadata for one holder's Remnawave account on one
+    configured server - a holder can have at most one account per server
+    (storage.User.remnawave_accounts is keyed by server name), since
+    Remnawave accounts and their internal squads are both scoped to a
+    single panel.
 
-    uuid: str = ""
+    Deliberately doesn't carry the panel's own account identifier (its
+    numeric `id` on a 3.x+ panel) - that's resolved on demand from the
+    panel's telegramId listing and cached separately in a
+    remnawave.cache.RemnawaveAccountCache (see services.remnawave_sync and
+    remnawave.cache.resolve_account_id), so this record can never itself go
+    stale the way a persisted identifier could across a panel migration
+    that changes how accounts are keyed (as Remnawave 3.0's uuid -> id
+    switch did)."""
+
     subscription_url: str = ""
     username: str = ""
     # True if an admin force-linked this account via the "Link Remnawave"

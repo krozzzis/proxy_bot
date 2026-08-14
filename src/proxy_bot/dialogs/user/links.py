@@ -87,6 +87,7 @@ async def _build_detail(dialog_manager: DialogManager, db_user: User, code_recor
     remnawave_active = not code_record.remnawave_disabled and not db_user.remnawave_disabled
     storage: Storage = dialog_manager.middleware_data["storage"]
     remnawave = dialog_manager.middleware_data.get("remnawave")
+    remnawave_account_cache = dialog_manager.middleware_data["remnawave_account_cache"]
     show_traffic = dialog_manager.middleware_data.get("show_traffic_usage", False)
 
     # Resolve each remnawave-type link's target up front - a code can now
@@ -114,8 +115,10 @@ async def _build_detail(dialog_manager: DialogManager, db_user: User, code_recor
 
     aggregate_info: dict[str, str] | None = None
     if aggregate_mode and targets:
-        server, account = next(iter(targets.values()))
-        aggregate_info = await fetch_subscription_lines(remnawave.get(server), account.uuid, i18n, show_traffic=show_traffic)
+        server, _account = next(iter(targets.values()))
+        aggregate_info = await fetch_subscription_lines(
+            remnawave, remnawave_account_cache, server, db_user.user_id, i18n, show_traffic=show_traffic
+        )
 
     entries: list[tuple[str, str, str]] = []
     for idx, link in enumerate(code_record.links):
@@ -132,7 +135,9 @@ async def _build_detail(dialog_manager: DialogManager, db_user: User, code_recor
         if not aggregate_mode:
             # Traffic stays aggregate-only per the confirmed UX - only the
             # expiry line is worth repeating per link.
-            info = await fetch_subscription_lines(remnawave.get(server), account.uuid, i18n, show_traffic=False)
+            info = await fetch_subscription_lines(
+                remnawave, remnawave_account_cache, server, db_user.user_id, i18n, show_traffic=False
+            )
             suffix = info["expiry"] if info else ""
         entries.append((link.name, account.subscription_url, suffix))
 
@@ -255,7 +260,8 @@ async def on_confirm_unsubscribe(_callback, _button, manager: DialogManager) -> 
 
     if await storage.users.remove_code(user.id, code_id):
         remnawave = manager.middleware_data.get("remnawave")
-        await sync_remnawave_access(storage, remnawave, user.id)
+        remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+        await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user.id)
         logger.info("%s gave up their own code %r", actor(user), code_id)
         manager.dialog_data["banner"] = "link-unsubscribed-done"
     manager.dialog_data.pop("selected_code", None)

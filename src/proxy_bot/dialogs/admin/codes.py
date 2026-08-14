@@ -258,8 +258,9 @@ async def on_delete_current_link(callback: CallbackQuery, _button: Button, manag
             # every current holder now instead of waiting for each one's
             # next unrelated code grant/revoke.
             remnawave = manager.middleware_data.get("remnawave")
+            remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
             for holder in await storage.users.users_with_code(code_id):
-                await sync_remnawave_access(storage, remnawave, holder.user_id)
+                await sync_remnawave_access(storage, remnawave, remnawave_account_cache, holder.user_id)
         await callback.answer(popup_text(i18n, "admin-code-link-removed"))
     await manager.switch_to(AdminCodes.links)
 
@@ -292,8 +293,9 @@ async def on_toggle_link_disabled(callback: CallbackQuery, _button: Button, mana
         # compute_remnawave_grants - resync every current holder now instead
         # of waiting for each one's next unrelated code grant/revoke.
         remnawave = manager.middleware_data.get("remnawave")
+        remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
         for holder in await storage.users.users_with_code(code_id):
-            await sync_remnawave_access(storage, remnawave, holder.user_id)
+            await sync_remnawave_access(storage, remnawave, remnawave_account_cache, holder.user_id)
 
     popup_key = "admin-code-link-disabled-done" if new_state else "admin-code-link-enabled-done"
     await callback.answer(popup_text(i18n, popup_key), show_alert=True)
@@ -448,8 +450,9 @@ async def on_link_name_done(name: str, manager: DialogManager) -> None:
             # resync every current holder now instead of waiting for each
             # one's next unrelated code grant/revoke.
             remnawave = manager.middleware_data.get("remnawave")
+            remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
             for holder in await storage.users.users_with_code(code_id):
-                await sync_remnawave_access(storage, remnawave, holder.user_id)
+                await sync_remnawave_access(storage, remnawave, remnawave_account_cache, holder.user_id)
         await bot.send_message(admin.id, i18n.get("admin-code-link-added"))
         await manager.switch_to(AdminCodes.links)
         return
@@ -555,6 +558,7 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
     remnawave = manager.middleware_data.get("remnawave")
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
     code_id = manager.dialog_data.get("selected_code")
 
     if await storage.codes.delete(code_id):
@@ -564,7 +568,7 @@ async def on_delete_code(callback: CallbackQuery, _button: Button, manager: Dial
         # never noticed the code was gone.
         for holder in await storage.users.users_with_code(code_id):
             await storage.users.remove_code(holder.user_id, code_id)
-            await sync_remnawave_access(storage, remnawave, holder.user_id)
+            await sync_remnawave_access(storage, remnawave, remnawave_account_cache, holder.user_id)
         logger.info("%s deleted code %r", actor(admin), code_id)
         await callback.answer(popup_text(i18n, "admin-code-deleted", code=code_id), show_alert=True)
     await manager.switch_to(AdminCodes.list)
@@ -579,6 +583,7 @@ async def on_toggle_remnawave_disabled(callback: CallbackQuery, _button: Button,
     i18n = manager.middleware_data["i18n"]
     admin = manager.middleware_data["event_from_user"]
     remnawave = manager.middleware_data.get("remnawave")
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
     code_id = manager.dialog_data.get("selected_code")
 
     code = await storage.codes.get(code_id)
@@ -591,7 +596,7 @@ async def on_toggle_remnawave_disabled(callback: CallbackQuery, _button: Button,
     # services.remnawave_sync.compute_remnawave_grants) - resync them all
     # now instead of waiting for each one's next unrelated code grant/revoke.
     for holder in await storage.users.users_with_code(code_id):
-        await sync_remnawave_access(storage, remnawave, holder.user_id)
+        await sync_remnawave_access(storage, remnawave, remnawave_account_cache, holder.user_id)
 
     action = "disabled" if new_state else "enabled"
     logger.info("%s %s Remnawave integration for code %r", actor(admin), action, code_id)

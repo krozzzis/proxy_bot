@@ -9,7 +9,7 @@ from aiogram_dialog.widgets.kbd import Button, Cancel, Column, Row, Select, Swit
 from aiogram_dialog.widgets.style.base import ButtonStyle
 from aiogram_dialog.widgets.text import Case, Format, List, Multi
 
-from proxy_bot.remnawave import RemnawaveError
+from proxy_bot.remnawave import RemnawaveError, resolve_account_id
 from proxy_bot.services.remnawave_sync import sync_remnawave_access
 from proxy_bot.storage import Storage
 from proxy_bot.utils.audit import actor, actor_id
@@ -126,13 +126,18 @@ async def on_unlink_remnawave(callback: CallbackQuery, _select, manager: DialogM
     if user is None:
         return
 
-    # Clears the manual link, not the account itself - if the user still
-    # holds a squad-granting code on this server, sync_remnawave_access
-    # below immediately re-matches the same account (by telegram id) and
+    # Clears the manual-link flag, not the account cache entry itself - if
+    # the user still holds a squad-granting code on this server,
+    # sync_remnawave_access below reuses the still-cached account id and
     # re-marks it auto, rather than leaving them with no account at all.
-    await storage.users.set_remnawave_account(user_id, server, None, None, None, manual=False)
+    # That only holds within the cache's TTL though (see remnawave.cache) -
+    # this account's telegramId was never set on the panel (manually-linked
+    # accounts don't get one), so a resync after the entry expires can't
+    # re-find it and provisions a fresh one instead.
+    await storage.users.set_remnawave_account(user_id, server, None, None, manual=False, unlink=True)
     remnawave = manager.middleware_data.get("remnawave")
-    await sync_remnawave_access(storage, remnawave, user_id)
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+    await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
 
     target = actor_id(user_id, user.username)
     logger.info("%s unlinked Remnawave account on server %r from %s", actor(admin), server, target)
@@ -156,7 +161,8 @@ async def on_toggle_remnawave_disabled(callback: CallbackQuery, _button: Button,
     new_state = not user.remnawave_disabled
     await storage.users.set_remnawave_disabled(user_id, new_state)
     remnawave = manager.middleware_data.get("remnawave")
-    await sync_remnawave_access(storage, remnawave, user_id)
+    remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+    await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
 
     target = actor_id(user_id, user.username)
     action = "disabled" if new_state else "enabled"
@@ -174,7 +180,7 @@ async def on_next_page(_callback: CallbackQuery, _button: Button, manager: Dialo
 
 
 async def _account_rows_and_server_choices(
-    dialog_manager: DialogManager, i18n, user, remnawave
+    dialog_manager: DialogManager, i18n, user, remnawave, remnawave_account_cache
 ) -> tuple[list[str], list[dict], list[dict]]:
     """Per-server Remnawave state for the user-detail screen: one rendered
     line per account with its own expiry/traffic (account_rows - empty
@@ -196,7 +202,7 @@ async def _account_rows_and_server_choices(
         if account is None or user.remnawave_disabled:
             continue
         subscription_info = await fetch_subscription_lines(
-            remnawave.get(server), account.uuid, i18n, show_traffic=show_traffic
+            remnawave, remnawave_account_cache, server, user.user_id, i18n, show_traffic=show_traffic
         )
         source = i18n.get(
             "admin-user-remnawave-link-source-manual" if account.linked_manually else "admin-user-remnawave-link-source-auto"
@@ -233,8 +239,9 @@ async def users_detail_getter(dialog_manager: DialogManager, i18n, **kwargs) -> 
     link_servers: list[dict] = []
     unlink_servers: list[dict] = []
     if remnawave_available:
+        remnawave_account_cache = dialog_manager.middleware_data["remnawave_account_cache"]
         account_rows, link_servers, unlink_servers = await _account_rows_and_server_choices(
-            dialog_manager, i18n, user, remnawave
+            dialog_manager, i18n, user, remnawave, remnawave_account_cache
         )
 
     return {
@@ -310,7 +317,8 @@ async def on_revoke_code(callback: CallbackQuery, _select, manager: DialogManage
     removed = await storage.users.remove_code(user_id, item_id)
     if removed:
         remnawave = manager.middleware_data.get("remnawave")
-        await sync_remnawave_access(storage, remnawave, user_id)
+        remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+        await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
         target_user = await storage.users.get(user_id)
         target = actor_id(user_id, target_user.username if target_user else None)
         logger.info("%s revoked code %r from %s", actor(admin), item_id, target)
@@ -355,16 +363,24 @@ async def on_toggle_ban(callback: CallbackQuery, _button: Button, manager: Dialo
     # out-of-band panel edit.
     remnawave = manager.middleware_data.get("remnawave")
     if remnawave is not None:
-        for server, account in user.remnawave_accounts.items():
+        remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+        for server in user.remnawave_accounts:
             client = remnawave.get(server)
-            if client is None or not account.uuid:
+            if client is None:
                 continue
             try:
+                account_id = await resolve_account_id(remnawave_account_cache, remnawave, server, user_id)
+                if account_id is None:
+                    continue
                 if new_state:
-                    await client.disable_user(account.uuid)
+                    await client.disable_user(account_id)
                 else:
-                    await client.enable_user(account.uuid)
+                    await client.enable_user(account_id)
             except RemnawaveError:
+                # The cached id may itself be why this failed (deleted on
+                # the panel since) - drop it so the next attempt re-resolves
+                # instead of retrying the same dead id for the rest of its TTL.
+                await remnawave_account_cache.invalidate(server, user_id)
                 logger.warning("Failed to push ban state to Remnawave (server %r) for %s", server, target, exc_info=True)
 
     await callback.answer()

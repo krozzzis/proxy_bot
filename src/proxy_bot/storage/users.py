@@ -20,10 +20,20 @@ def _user_from_raw(user_id: int, raw: dict) -> User:
     """Build a User from its raw `users.toml` dict, unpacking the nested
     `remnawave_accounts` table into RemnawaveAccount instances (a plain
     `User(user_id=user_id, **raw)` can't do this itself - the dataclass
-    field is `dict[str, RemnawaveAccount]`, not `dict[str, dict]`)."""
+    field is `dict[str, RemnawaveAccount]`, not `dict[str, dict]`).
+
+    Drops a stray `uuid` key from each account entry - RemnawaveAccount
+    carried one until the Remnawave 3.x migration moved account
+    identification to remnawave.cache.RemnawaveAccountCache (see
+    services.remnawave_sync); a record written before that change still has
+    the key on disk/in Redis; ``RemnawaveAccount(**account)`` would
+    otherwise raise on it every time this user loads."""
     data = dict(raw)
     raw_accounts = data.pop("remnawave_accounts", {})
-    accounts = {server: RemnawaveAccount(**account) for server, account in raw_accounts.items()}
+    accounts = {
+        server: RemnawaveAccount(**{k: v for k, v in account.items() if k != "uuid"})
+        for server, account in raw_accounts.items()
+    }
     return User(user_id=user_id, remnawave_accounts=accounts, **data)
 
 
@@ -145,17 +155,21 @@ class UserRepo:
         self,
         user_id: int,
         server: str,
-        uuid: str | None,
         subscription_url: str | None,
         username: str | None = None,
         *,
         manual: bool = False,
+        unlink: bool = False,
     ) -> bool:
-        """Link (or unlink, if `uuid` is None) this user's Remnawave account
-        on `server`. `manual` distinguishes an admin's explicit "Link
-        Remnawave" pick (dialogs/admin/link_remnawave.py) from an automatic
-        provision/match (services/remnawave_sync.py) - shown on the admin
-        user-detail page so an admin can tell the two apart."""
+        """Link (or unlink, if `unlink` is set) this user's Remnawave
+        account on `server`. `manual` distinguishes an admin's explicit
+        "Link Remnawave" pick (dialogs/admin/link_remnawave.py) from an
+        automatic provision/match (services/remnawave_sync.py) - shown on
+        the admin user-detail page so an admin can tell the two apart.
+
+        Only display metadata - the panel's own account id is resolved on
+        demand and cached separately (see remnawave.cache), not persisted
+        here (see RemnawaveAccount's docstring for why)."""
 
         def mutate(data: dict) -> bool:
             users = data.get("users", {})
@@ -163,11 +177,10 @@ class UserRepo:
             if key not in users:
                 return False
             accounts = users[key].setdefault("remnawave_accounts", {})
-            if uuid is None:
+            if unlink:
                 accounts.pop(server, None)
             else:
                 accounts[server] = {
-                    "uuid": uuid,
                     "subscription_url": subscription_url or "",
                     "username": username or "",
                     "linked_manually": manual,

@@ -27,7 +27,13 @@ from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unk
 from proxy_bot.heartbeat import run_heartbeat
 from proxy_bot.logging_config import setup_logging
 from proxy_bot.middlewares import InteractionLoggingMiddleware, RateLimitMiddleware
-from proxy_bot.remnawave import RemnawaveClient, RemnawaveRegistry
+from proxy_bot.remnawave import (
+    MemoryRemnawaveAccountCache,
+    RedisRemnawaveAccountCache,
+    RemnawaveAccountCache,
+    RemnawaveClient,
+    RemnawaveRegistry,
+)
 from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
@@ -70,6 +76,21 @@ def _register_background_task(dp: Dispatcher, factory: Callable[[], Awaitable[No
     dp.shutdown.register(stop)
 
 
+def _build_remnawave_account_cache(config: Config) -> tuple[RemnawaveAccountCache, object | None]:
+    """A Redis-backed cache when REDIS_URL is configured (shared prod
+    deployments, so every worker/replica sees the same resolved account
+    ids), else an in-process dict - independent of FSM_BACKEND, since a
+    sqlite FSM with Redis available for this is a legitimate combination.
+    Second return value is the raw redis client, for closing at shutdown -
+    None for the in-process fallback."""
+    if not config.redis_url:
+        return MemoryRemnawaveAccountCache(), None
+    import redis.asyncio as redis_asyncio
+
+    client = redis_asyncio.from_url(config.redis_url)
+    return RedisRemnawaveAccountCache(client), client
+
+
 async def run() -> None:
     config = load_config()
     setup_logging(config.logs_dir, level=config.log_level)
@@ -79,6 +100,7 @@ async def run() -> None:
         name: RemnawaveClient(server.url, server.token) for name, server in config.remnawave_servers.items()
     }
     remnawave = RemnawaveRegistry(remnawave_clients) if remnawave_clients else None
+    remnawave_account_cache, remnawave_account_cache_redis = _build_remnawave_account_cache(config)
 
     # HTML parse mode is on for every send (plain fluent strings render fine
     # as HTML). Any dynamic value interpolated into a message - names, codes,
@@ -87,6 +109,7 @@ async def run() -> None:
     dp = Dispatcher(storage=build_fsm_storage(config))
     dp["storage"] = storage
     dp["remnawave"] = remnawave
+    dp["remnawave_account_cache"] = remnawave_account_cache
     dp["dispatcher"] = dp
     dp["show_traffic_usage"] = config.show_traffic_usage
     dp["logo_path"] = config.logo_path
@@ -123,7 +146,7 @@ async def run() -> None:
     _register_background_task(dp, lambda: run_heartbeat(config.data_dir / ".heartbeat"))
     # Pull direction of ban-state sync (a panel-side enable/disable flowing
     # back into `banned`) - no-ops on its own if remnawave is None.
-    _register_background_task(dp, lambda: run_remnawave_ban_sync(storage, remnawave))
+    _register_background_task(dp, lambda: run_remnawave_ban_sync(storage, remnawave, remnawave_account_cache))
 
     await setup_bot_commands(bot, storage)
 
@@ -148,6 +171,8 @@ async def run() -> None:
         await bot.session.close()
         if remnawave is not None:
             await remnawave.close_all()
+        if remnawave_account_cache_redis is not None:
+            await remnawave_account_cache_redis.aclose()
 
 
 async def _start_polling(bot: Bot, dp: Dispatcher) -> None:

@@ -154,7 +154,8 @@ async def on_confirm(callback: CallbackQuery, _button: Button, manager: DialogMa
         await storage.users.add_code(user_id, code)
     if codes:
         remnawave = manager.middleware_data.get("remnawave")
-        await sync_remnawave_access(storage, remnawave, user_id)
+        remnawave_account_cache = manager.middleware_data["remnawave_account_cache"]
+        await sync_remnawave_access(storage, remnawave, remnawave_account_cache, user_id)
 
     target = actor_id(user_id, target_user.username if target_user else None)
     logger.info("%s manually added user %s with subscriptions %s", actor(admin), target, codes)

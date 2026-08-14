@@ -31,6 +31,7 @@ class UserMenu(StatesGroup):
 async def on_dialog_start(start_data: object, dialog_manager: DialogManager) -> None:
     storage: Storage = dialog_manager.middleware_data["storage"]
     remnawave = dialog_manager.middleware_data.get("remnawave")
+    remnawave_account_cache = dialog_manager.middleware_data["remnawave_account_cache"]
     user = dialog_manager.middleware_data["event_from_user"]
     await storage.users.get_or_create(user.id, user.username, user.full_name)
 
@@ -44,7 +45,7 @@ async def on_dialog_start(start_data: object, dialog_manager: DialogManager) -> 
     if not auto_code:
         return
 
-    status, _code_record = await activate_code(storage, remnawave, user, auto_code)
+    status, _code_record = await activate_code(storage, remnawave, remnawave_account_cache, user, auto_code)
     if status in ("banned", "invalid", "locked"):
         await dialog_manager.start(EnterCode.main, data={"error": status})
     else:
