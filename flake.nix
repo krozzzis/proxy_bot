@@ -19,6 +19,9 @@
             # rsvg-convert, used by scripts/generate_emoji_pack.py to render
             # the custom-emoji icon pack from SVG to PNG.
             pkgs.librsvg
+            # openssl CLI, used by utils/webhook_cert.py to generate the
+            # self-signed cert for USE_WEBHOOK=true (see config.py).
+            pkgs.openssl
           ];
 
           env = {

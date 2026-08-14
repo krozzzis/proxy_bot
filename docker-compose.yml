@@ -51,6 +51,17 @@ services:
       # that doesn't follow that convention. See .env.example.
       BRANDED_LOGO_PATH_RU: ${BRANDED_LOGO_PATH_RU:-}
       BRANDED_LOGO_PATH_EN: ${BRANDED_LOGO_PATH_EN:-}
+      # Webhook mode - off by default (long polling). See .env.example.
+      # When on, the bot binds its own HTTPS listener directly (self-signed
+      # cert, no reverse proxy needed) on WEBAPP_PORT below, which is why
+      # that port is published to the host unconditionally - a no-op while
+      # USE_WEBHOOK is unset since nothing listens on it then.
+      USE_WEBHOOK: ${USE_WEBHOOK:-false}
+      WEBHOOK_HOST: ${WEBHOOK_HOST:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      WEBAPP_PORT: ${WEBAPP_PORT:-8443}
+    ports:
+      - "${WEBAPP_PORT:-8443}:${WEBAPP_PORT:-8443}"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs

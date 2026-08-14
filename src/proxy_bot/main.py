@@ -3,17 +3,22 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import signal
+import ssl
 from collections.abc import Awaitable, Callable
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import ExceptionTypeFilter
+from aiogram.types import FSInputFile
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram_dialog import setup_dialogs
 from aiogram_dialog.api.exceptions import OutdatedIntent, UnknownIntent, UnknownState
+from aiohttp import web
 
 from proxy_bot.commands import setup_bot_commands
-from proxy_bot.config import load_config
+from proxy_bot.config import Config, load_config
 from proxy_bot.dialogs import router as dialogs_router
 from proxy_bot.fsm import build_fsm_storage
 from proxy_bot.handlers import get_command_routers, get_fallback_routers, on_unknown_dialog_event
@@ -24,6 +29,7 @@ from proxy_bot.remnawave import RemnawaveClient, RemnawaveRegistry
 from proxy_bot.services.remnawave_sync import run_remnawave_ban_sync
 from proxy_bot.storage import Storage
 from proxy_bot.utils.i18n import build_i18n_middleware, watch_locales
+from proxy_bot.utils.webhook_cert import ensure_self_signed_cert
 
 logger = logging.getLogger(__name__)
 
@@ -96,14 +102,81 @@ async def run() -> None:
 
     await setup_bot_commands(bot, storage)
 
-    logger.info("Starting bot polling")
-    await bot.delete_webhook(drop_pending_updates=True)
     try:
-        await dp.start_polling(bot)
+        if config.use_webhook:
+            await _run_webhook(bot, dp, config)
+        else:
+            logger.info("Starting bot polling")
+            # No-op if no webhook was ever set - safe to call unconditionally
+            # here since this branch is polling-only (the webhook branch
+            # below sets one instead of deleting it).
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot)
     finally:
+        # SimpleRequestHandler.close() (webhook branch) already closes the
+        # bot session as part of the aiohttp app's own shutdown, but a
+        # second close() is a no-op - simpler to always close here than to
+        # track which branch already did it.
         await bot.session.close()
         if remnawave is not None:
             await remnawave.close_all()
+
+
+async def _run_webhook(bot: Bot, dp: Dispatcher, config: Config) -> None:
+    """The webhook counterpart to `dp.start_polling(bot)`: binds an aiohttp
+    server directly (no reverse proxy involved - see Config.use_webhook) and
+    registers it with Telegram. Runs until cancelled, same contract as
+    start_polling.
+    """
+    ensure_self_signed_cert(config.webhook_cert_path, config.webhook_privkey_path, config.webhook_host)
+
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dp, bot=bot, secret_token=config.webhook_secret_token).register(
+        app, path=config.webhook_path
+    )
+    # Wires dp's own startup/shutdown (background tasks registered via
+    # _register_background_task, above) into the aiohttp app's lifecycle -
+    # same role dp.start_polling() plays for the polling branch.
+    setup_application(app, dp, bot=bot)
+
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain(str(config.webhook_cert_path), str(config.webhook_privkey_path))
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, config.webapp_host, config.webapp_port, ssl_context=ssl_context)
+    await site.start()
+    logger.info("Webhook server listening on %s:%s%s", config.webapp_host, config.webapp_port, config.webhook_path)
+
+    # Only registered with Telegram once something is actually listening -
+    # the other way round would have Telegram start POSTing (and retrying,
+    # and logging a delivery error) against a port nothing answers on yet.
+    # Telegram only calls back on 443/80/88/8443 and only omits the port
+    # from the URL for 443 (the HTTPS default) - every other allowed port
+    # must be spelled out explicitly or the callback never arrives.
+    port_suffix = "" if config.webapp_port == 443 else f":{config.webapp_port}"
+    webhook_url = f"https://{config.webhook_host}{port_suffix}{config.webhook_path}"
+    await bot.set_webhook(
+        url=webhook_url,
+        certificate=FSInputFile(config.webhook_cert_path),
+        secret_token=config.webhook_secret_token,
+        drop_pending_updates=True,
+    )
+    logger.info("Webhook registered at %s", webhook_url)
+
+    # dp.start_polling() (the other branch) installs its own SIGINT/SIGTERM
+    # handling; this branch needs the same so `docker stop` (SIGTERM) still
+    # runs the `finally` below - and, via it, dp.emit_shutdown() - instead
+    # of the process just dying mid-request with background tasks and the
+    # FSM store never told to close.
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop_event.set)
+    loop.add_signal_handler(signal.SIGINT, stop_event.set)
+    try:
+        await stop_event.wait()
+    finally:
+        await runner.cleanup()
 
 
 def main() -> None:

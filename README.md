@@ -50,6 +50,11 @@ even before `admins.toml` exists. More admins can be added from the panel.
 | `BRANDED_LOGO_PATH` | no | — | optional branded logo photo |
 | `BRANDED_LOGO_MODE` | no | `before` | `before` (own message ahead of the menu) or `caption` (attached to the menu message) |
 | `BRANDED_LOGO_PATH_<LOCALE>` | no | — | per-locale override, e.g. `BRANDED_LOGO_PATH_RU` (auto-detected `logo_ru.png`-style siblings work without this) |
+| `USE_WEBHOOK` | no | `false` | `true` to receive updates via webhook instead of long polling |
+| `WEBHOOK_HOST` | if webhook | — | public DNS name for this host, e.g. `bot.example.com` |
+| `WEBHOOK_SECRET` | if webhook | — | random string; also doubles as the webhook path's secret component |
+| `WEBAPP_PORT` | no | `8443` | port the bot's own HTTPS listener binds to (443/80/88/8443 only) |
+| `WEBAPP_HOST` | no | `0.0.0.0` | interface the listener binds to inside the container |
 
 See [`.env.example`](.env.example) for the full, commented list.
 

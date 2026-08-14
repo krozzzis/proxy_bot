@@ -55,6 +55,22 @@ class Config:
     # <suffix>` sibling file (logo.png -> logo_ru.png) if one exists, before
     # falling back to logo_path itself.
     logo_path_overrides: dict[str, Path]
+    # Off by default (long polling, see main.run()). When on, the bot binds
+    # its own HTTPS listener directly (no reverse proxy involved) and
+    # registers it with Telegram via setWebhook, per the "self-signed
+    # certificate" pattern the Bot API supports for exactly this - no CA-
+    # issued cert or Caddy/Nginx in front required, just a DNS record for
+    # webhook_host pointing at this host and the matching port reachable
+    # from the internet (443/80/88/8443 are the only ports Telegram will
+    # call back on).
+    use_webhook: bool
+    webhook_host: str
+    webhook_path: str
+    webhook_secret_token: str
+    webhook_cert_path: Path
+    webhook_privkey_path: Path
+    webapp_host: str
+    webapp_port: int
 
 
 def _require_env(name: str) -> str:
@@ -100,7 +116,36 @@ def load_config() -> Config:
         logo_path=(Path(os.environ["BRANDED_LOGO_PATH"]) if os.environ.get("BRANDED_LOGO_PATH") else None),
         logo_mode=_logo_mode_env(),
         logo_path_overrides=_logo_path_overrides_env(),
+        **_webhook_env(),
     )
+
+
+def _webhook_env() -> dict[str, object]:
+    use_webhook = _bool_env("USE_WEBHOOK")
+    data_dir = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
+    # WEBHOOK_HOST/WEBHOOK_SECRET are only required once webhook mode is
+    # actually turned on - _require_env here (rather than at Config
+    # construction time unconditionally) keeps every polling-mode deployment
+    # (the default, including local dev and the test bot) working without
+    # ever having to set them.
+    webhook_host = _require_env("WEBHOOK_HOST") if use_webhook else ""
+    webhook_secret_token = _require_env("WEBHOOK_SECRET") if use_webhook else ""
+    return {
+        "use_webhook": use_webhook,
+        "webhook_host": webhook_host,
+        # Secret-bearing path component, not just a fixed "/webhook" - an
+        # unauthenticated POST to a guessed path could otherwise feed
+        # forged Update objects into the dispatcher. Doubles as the
+        # X-Telegram-Bot-Api-Secret-Token value Telegram echoes back on
+        # every real callback (see SimpleRequestHandler in main.py), so a
+        # request needs to know both to be accepted.
+        "webhook_path": f"/webhook/{webhook_secret_token}" if use_webhook else "",
+        "webhook_secret_token": webhook_secret_token,
+        "webhook_cert_path": Path(os.environ.get("WEBHOOK_CERT_PATH", data_dir / "webhook_cert.pem")),
+        "webhook_privkey_path": Path(os.environ.get("WEBHOOK_PRIVKEY_PATH", data_dir / "webhook_privkey.pem")),
+        "webapp_host": os.environ.get("WEBAPP_HOST", "0.0.0.0"),
+        "webapp_port": int(os.environ.get("WEBAPP_PORT", "8443")),
+    }
 
 
 def _logo_mode_env() -> str:
