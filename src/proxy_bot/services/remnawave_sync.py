@@ -64,6 +64,15 @@ async def sync_remnawave_access(
     either remnawave_disabled override changes. No-ops if Remnawave isn't
     configured; swallows API errors per-server so one panel's hiccup never
     blocks a local code grant/revoke or another server's sync.
+
+    An auto-provisioned account whose last grant on a server drops to
+    nothing gets disabled ("frozen") rather than just stripped of squads or
+    deleted - a later re-grant (the same code again, or a different one)
+    re-enables the same account instead of provisioning a new one. A
+    manually-linked account (dialogs/admin/link_remnawave.py) is never
+    touched on a revoke at all - not frozen, squads left as the admin set
+    them - since that account is an admin's explicit pick, not this sync's
+    to manage.
     """
     if remnawave is None:
         return
@@ -74,9 +83,9 @@ async def sync_remnawave_access(
 
     grants = await compute_remnawave_grants(storage, db_user)
     # The union, not just servers with a grant: a server whose grant just
-    # dropped to nothing but still has a live account needs
-    # update_user_squads(id, []) too, or the panel-side membership goes
-    # stale instead of following the revoke.
+    # dropped to nothing but still has a live account needs a freeze (or,
+    # for a manually-linked one, a no-op - see below) too, or the panel-side
+    # membership goes stale instead of following the revoke.
     servers = set(grants) | set(db_user.remnawave_accounts)
 
     for server in servers:
@@ -91,32 +100,55 @@ async def sync_remnawave_access(
         if not squad_list and account is None:
             continue
 
+        manual = account.linked_manually if account is not None else False
+        # A manually-linked account (dialogs/admin/link_remnawave.py) is an
+        # admin's explicit pick, not something this sync should ever
+        # freeze/unfreeze or otherwise touch on its own - a revoke here
+        # just leaves it exactly as the admin set it up, squads included.
+        if not squad_list and manual:
+            continue
+
         try:
             account_id = await account_cache.get(server, user_id)
-            if account_id is not None:
-                await client.update_user_squads(account_id, squad_list)
+            just_created = False
+            if account_id is None:
+                # Cache miss: re-resolve by telegramId. A manually-linked
+                # account never gets a panel-side telegramId set, so this
+                # always misses for one and falls through to provisioning a
+                # fresh "tg_" account below - a known, accepted tradeoff
+                # (see remnawave.cache's docstring) rather than this bot
+                # writing telegramId onto an account an admin explicitly
+                # picked.
+                rw_user = await client.get_user_by_telegram_id(user_id)
+                if rw_user is None:
+                    if not squad_list:
+                        continue
+                    rw_user = await _create_account(client, db_user, squad_list)
+                    manual = False
+                    just_created = True
+                account_id = rw_user.id
+                await account_cache.set(server, user_id, account_id)
+                await storage.users.set_remnawave_account(
+                    user_id, server, rw_user.subscription_url, rw_user.username, manual=manual
+                )
+
+            if just_created:
+                # _create_account already set these squads at creation time
+                # - nothing more to do.
                 continue
 
-            # Cache miss: re-resolve by telegramId. A manually-linked
-            # account (dialogs/admin/link_remnawave.py) never gets a
-            # panel-side telegramId set, so this always misses for one and
-            # falls through to provisioning a fresh "tg_" account below -
-            # a known, accepted tradeoff (see remnawave.cache's docstring)
-            # rather than this bot writing telegramId onto an account an
-            # admin explicitly picked.
-            rw_user = await client.get_user_by_telegram_id(user_id)
-            manual = account.linked_manually if account is not None else False
-            if rw_user is None:
-                if not squad_list:
-                    continue
-                rw_user = await _create_account(client, db_user, squad_list)
-                manual = False
-            else:
-                await client.update_user_squads(rw_user.id, squad_list)
-            await account_cache.set(server, user_id, rw_user.id)
-            await storage.users.set_remnawave_account(
-                user_id, server, rw_user.subscription_url, rw_user.username, manual=manual
-            )
+            if squad_list:
+                if not manual:
+                    # Undo a previous freeze (harmless no-op if it wasn't
+                    # actually frozen).
+                    await client.enable_user(account_id)
+                await client.update_user_squads(account_id, squad_list)
+            elif not manual:
+                # This holder's last grant on this server just dropped to
+                # nothing - freeze rather than delete, so re-granting later
+                # (another code, or this one again) just re-enables the
+                # same account instead of provisioning a new one.
+                await client.disable_user(account_id)
         except RemnawaveError:
             # A cached id can be the reason this failed (deleted on the
             # panel since it was resolved) - drop it so the next sync
@@ -147,9 +179,19 @@ async def sync_ban_state_from_remnawave(
     ban a fellow admin through this path, mirroring on_toggle_ban's own
     guard - unlike that handler, there's no admin present to show a popup
     to, so this just logs and leaves the local flag untouched.
+
+    An auto-provisioned account currently holding no grant is also skipped
+    (not treated as a ban signal even if DISABLED) - sync_remnawave_access
+    freezes exactly that account in exactly that situation on a routine
+    revoke, and the panel exposes no way to tell that apart from an actual
+    out-of-band ban. A manually-linked account is never auto-frozen, so its
+    status stays meaningful regardless of its current grant.
     """
+    grants = await compute_remnawave_grants(storage, db_user)
     statuses: set[bool] = set()
-    for server in db_user.remnawave_accounts:
+    for server, account in db_user.remnawave_accounts.items():
+        if not account.linked_manually and not grants.get(server):
+            continue
         client = remnawave.get(server)
         if client is None:
             continue
